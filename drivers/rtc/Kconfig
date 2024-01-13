@@ -1409,7 +1409,7 @@ config RTC_DRV_OMAP
 
 config RTC_DRV_S3C
 	tristate "Samsung S3C series SoC RTC"
-	depends on ARCH_EXYNOS || ARCH_S3C64XX || ARCH_S5PV210 || \
+	depends on ARCH_EXYNOS || ARCH_S3C64XX || ARCH_S5P6442 || ARCH_S5PV210 || \
 		   COMPILE_TEST
 	help
 	  RTC (Realtime Clock) driver for the clock inbuilt into the

@@ -50,7 +50,7 @@ config EXYNOS_PMU_ARM_DRIVERS
 
 config SAMSUNG_PM_CHECK
 	bool "S3C2410 PM Suspend Memory CRC"
-	depends on PM && (ARCH_S3C64XX || ARCH_S5PV210)
+	depends on PM && (ARCH_S3C64XX || ARCH_S5PV210 || ARCH_S5P6442)
 	select CRC32
 	help
 	  Enable the PM code's memory area checksum over sleep. This option

@@ -213,6 +213,7 @@ machine-$(CONFIG_ARCH_ROCKCHIP)		+= rockchip
 machine-$(CONFIG_ARCH_RPC)		+= rpc
 machine-$(CONFIG_PLAT_SAMSUNG)		+= s3c
 machine-$(CONFIG_ARCH_S5PV210)		+= s5pv210
+machine-$(CONFIG_ARCH_S5P6442)		+= s5p6442
 machine-$(CONFIG_ARCH_SA1100)		+= sa1100
 machine-$(CONFIG_ARCH_RENESAS)	 	+= shmobile
 machine-$(CONFIG_ARCH_INTEL_SOCFPGA)	+= socfpga
@@ -232,6 +233,7 @@ machine-$(CONFIG_PLAT_SPEAR)		+= spear
 machdirs-$(CONFIG_ARCH_FOOTBRIDGE)	+= arch/arm/mach-footbridge
 machdirs-$(CONFIG_ARCH_RPC)		+= arch/arm/mach-rpc
 machdirs-$(CONFIG_ARCH_SA1100)		+= arch/arm/mach-sa1100
+machdirs-$(CONFIG_ARCH_S5P6442)		+= arch/arm/mach-s5p6442 # TODO: Transition this from legacy
 KBUILD_CPPFLAGS += $(patsubst %,-I$(srctree)/%/include,$(machdirs-y))
 
 # The byte offset of the kernel image in RAM from the start of RAM.

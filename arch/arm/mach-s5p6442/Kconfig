@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (c) 2010 Samsung Electronics Co., Ltd.
+#		http://www.samsung.com/
+
+# Configuration options for the S5PV210/S5PC110
+
+config ARCH_S5P6442
+	bool "Samsung S5P6442"
+	depends on ARCH_MULTI_V6
+	select ARM_VIC
+	select CLKSRC_SAMSUNG_PWM
+	select COMMON_CLK_SAMSUNG
+	select GPIOLIB
+	select PINCTRL
+	select PINCTRL_S3C64XX
+	select SOC_SAMSUNG
+	help
+	  Samsung S5P6442 based systems
+
+if ARCH_S5P6442
+
+config CPU_S5P6442
+	def_bool y
+	select ARM_AMBA
+	select PL330_DMA if DMADEVICES
+	help
+	  Enable S5P6442 CPU support
+
+endif

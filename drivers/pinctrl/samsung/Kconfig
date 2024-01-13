@@ -25,5 +25,5 @@ config PINCTRL_EXYNOS_ARM64
 
 config PINCTRL_S3C64XX
 	bool "Samsung S3C64XX SoC pinctrl driver"
-	depends on ARCH_S3C64XX || (COMPILE_TEST && OF)
+	depends on ARCH_S3C64XX || ARCH_S5P6442 || (COMPILE_TEST && OF)
 	select PINCTRL_SAMSUNG

@@ -327,7 +327,7 @@ config ARCH_MMAP_RND_BITS_MAX
 
 config ARCH_MULTIPLATFORM
 	bool "Require kernel to be portable to multiple machines" if EXPERT
-	depends on MMU && !(ARCH_FOOTBRIDGE || ARCH_RPC || ARCH_SA1100)
+	depends on MMU && !(ARCH_FOOTBRIDGE || ARCH_RPC || ARCH_SA1100 || ARCH_S5P6442)
 	default y
 	help
 	  In general, all Arm machines can be supported in a single
@@ -516,6 +516,8 @@ source "arch/arm/mach-rockchip/Kconfig"
 source "arch/arm/mach-s3c/Kconfig"
 
 source "arch/arm/mach-s5pv210/Kconfig"
+
+source "arch/arm/mach-s5p6442/Kconfig"
 
 source "arch/arm/mach-sa1100/Kconfig"
 

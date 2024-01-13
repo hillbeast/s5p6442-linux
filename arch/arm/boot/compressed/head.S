@@ -1118,9 +1118,15 @@ proc_types:
 
 		.word	0x000f0000		@ new CPU Id
 		.word	0x000f0000
+		#ifdef CONFIG_ARCH_S5P6442			// FIXME: S5P6442 identifies as an ARMv7 core
+		W(b)	__armv6_mmu_cache_on		// and this causes the cache to be initialised
+		W(b)	__armv4_mmu_cache_off		// incorrectly. This hack is only temporary
+		W(b)	__armv6_mmu_cache_flush		// until I can figure out why it is doing this.
+		#else
 		W(b)	__armv7_mmu_cache_on
 		W(b)	__armv7_mmu_cache_off
 		W(b)	__armv7_mmu_cache_flush
+		#endif
 
 		.word	0			@ unrecognised type
 		.word	0
