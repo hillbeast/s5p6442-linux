@@ -4,4 +4,5 @@
 # 		http://www.samsung.com/
 
 obj-$(CONFIG_PM_SLEEP)		+= pm.o sleep.o
-obj-y				+= s5pv210.o
+obj-$(CONFIG_CPU_S5PV210)	+= s5pv210.o
+obj-$(CONFIG_CPU_S5P6442)	+= s5p6442.o
