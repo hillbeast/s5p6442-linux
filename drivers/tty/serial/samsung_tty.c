@@ -2764,6 +2764,8 @@ static int __init s5pv210_early_console_setup(struct earlycon_device *device,
 	return samsung_early_console_setup(device, opt);
 }
 
+OF_EARLYCON_DECLARE(s5p6442, "samsung,s5p6442-uart",
+			s5pv210_early_console_setup);
 OF_EARLYCON_DECLARE(s5pv210, "samsung,s5pv210-uart",
 			s5pv210_early_console_setup);
 OF_EARLYCON_DECLARE(exynos4210, "samsung,exynos4210-uart",

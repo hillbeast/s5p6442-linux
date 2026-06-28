@@ -13,15 +13,18 @@
 #include <linux/platform_device.h>
 #include <linux/memblock.h>
 
+#include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <asm/setup.h>
 #include <asm/system_misc.h>
 
 #include "common.h"
-#include "s5p6442.h"
+#include "map-base.h"
 #include "regs-clock.h"
+#include "s5p6442.h"
 
-static int __init s5pv210_fdt_map_sys(unsigned long node, const char *uname,
+static int __init s5p6442_fdt_map_sys(unsigned long node, const char *uname,
 					int depth, void *data)
 {
 	struct map_desc iodesc;
@@ -44,22 +47,33 @@ static int __init s5pv210_fdt_map_sys(unsigned long node, const char *uname,
 	return 1;
 }
 
-static void __init s5p6442_dt_map_io(void)
+static void __init s5p6442_map_io(void)
 {
 	debug_ll_io_init();
 
-	of_scan_flat_dt(s5pv210_fdt_map_sys, NULL);
+	of_scan_flat_dt(s5p6442_fdt_map_sys, NULL);
 }
 
-static void s5p6442_dt_restart(enum reboot_mode mode, const char *cmd)
+static void s5p6442_restart(enum reboot_mode mode, const char *cmd)
 {
 	__raw_writel(0x1, S5P_SWRESET);
 }
 
-static void __init s5p6442_dt_init_late(void)
+static void __init s5p6442_init_late(void)
 {
 	platform_device_register_simple("s5pv210-cpufreq", -1, NULL, 0);
 	s5pv210_pm_init();
+}
+
+static char const *const s5p6442_compat[] __initconst = {
+	"samsung,s5p6442",
+	NULL
+};
+
+void __init s5p6442_fixup(struct tag *t, char **from)
+{
+	early_print("s5p6442_fixup() entered\n");
+	memblock_add(PHYS_OFFSET, APOLLO_PHYS_SIZE_DDR);
 }
 
 static char const *const s5p6442_dt_compat[] __initconst = {
@@ -67,16 +81,10 @@ static char const *const s5p6442_dt_compat[] __initconst = {
 	NULL
 };
 
-void __init s5p6442_fixup(struct tag *t, char **from)
-{
-	memblock_add(PHYS_OFFSET, APOLLO_PHYS_SIZE_DDR);
-}
-
-DT_MACHINE_START(S5P6442_DT, "Samsung S5P6442-based board")
-	.fixup = s5p6442_fixup,
+DT_MACHINE_START(SMDK6442, "Samsung S5P6442-based board")
 	.dt_compat = s5p6442_dt_compat,
-	.map_io = s5p6442_dt_map_io,
-	.restart = s5p6442_dt_restart,
-	.init_late = s5p6442_dt_init_late,
-	.nr = APOLLO_MACHID,
+	.fixup = s5p6442_fixup,
+	.map_io = s5p6442_map_io,
+	.restart = s5p6442_restart,
+	.init_late = s5p6442_init_late,
 MACHINE_END
