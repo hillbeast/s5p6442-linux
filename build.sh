@@ -1,9 +1,9 @@
 #!/bin/sh
 
-TOOLCHAIN="/home/hillbeast/cross/bin/arm-linux-gnueabi-"
-CORES=8
+TOOLCHAIN="/home/hillbeast/Development/cross/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi-"
+CORES=16
 VERSION="Test-`date '+%Y%m%d-%H%M'`"
-CPDEST="/mnt/c/Users/thebe/Desktop/"
+CPDEST="/home/hillbeast/Desktop/"
 DTB="samsung/s5p6442-apollo.dtb"
 
 export KBUILD_BUILD_VERSION=$VERSION

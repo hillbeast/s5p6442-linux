@@ -19,8 +19,8 @@
 		i2c7 = &i2c_musb;
 		i2c9 = &i2c_fuel;
 		i2c10 = &i2c_touchkey;
-		i2c11 = &i2c_prox;
-		i2c12 = &i2c_magnetometer;
+//		i2c11 = &i2c_prox;
+//		i2c12 = &i2c_magnetometer;
 	};
 
 	memory@20000000 {
