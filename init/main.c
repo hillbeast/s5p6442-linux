@@ -1034,8 +1034,10 @@ void start_kernel(void)
 	if (late_time_init)
 		late_time_init();
 	sched_clock_init();
+	printk("calibrate_delay()\n");
 	calibrate_delay();
 
+	printk("arch_cpu_finalize_init()\n");
 	arch_cpu_finalize_init();
 
 	pid_idr_init();

@@ -5,6 +5,7 @@
 
 /dts-v1/;
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include "s5p6442.dtsi"
 
@@ -481,7 +482,7 @@
 
 			pinctrl-names = "default";
 			pinctrl-0 = <&touchkey_irq>;
-		}; */
+		};
 	};
 
 	i2c_prox: i2c-gpio-6 {
