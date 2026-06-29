@@ -13,6 +13,7 @@
 build.sh
 zImage
 stl1ENKI
+initramfs.cpio
 .*
 *.a
 *.asn1.[ch]

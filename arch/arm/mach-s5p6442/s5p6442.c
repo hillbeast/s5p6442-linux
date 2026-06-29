@@ -83,6 +83,7 @@ static char const *const s5p6442_dt_compat[] __initconst = {
 
 DT_MACHINE_START(SMDK6442, "Samsung S5P6442-based board")
 	.dt_compat = s5p6442_dt_compat,
+	.nr_irqs = S5P6442_NR_IRQS,
 	.fixup = s5p6442_fixup,
 	.map_io = s5p6442_map_io,
 	.restart = s5p6442_restart,

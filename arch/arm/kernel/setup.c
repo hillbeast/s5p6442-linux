@@ -249,6 +249,13 @@ static int __get_cpu_architecture(void)
 		if (cpu_arch)
 			cpu_arch += CPU_ARCH_ARMv3;
 	} else if ((read_cpuid_id() & 0x000f0000) == 0x000f0000) {
+		/* This patch is for Samsung S5P6442 which erroneously 
+		 * reports as ARMv7 due to its VMSAv7 memory model
+		 * but is actually ARMv6.
+		 */
+		#ifdef CONFIG_CPU_S5P6442
+			return CPU_ARCH_ARMv6;
+		#else
 		/* Revised CPUID format. Read the Memory Model Feature
 		 * Register 0 and check for VMSAv7 or PMSAv7 */
 		unsigned int mmfr0 = read_cpuid_ext(CPUID_EXT_MMFR0);
@@ -260,6 +267,7 @@ static int __get_cpu_architecture(void)
 			cpu_arch = CPU_ARCH_ARMv6;
 		else
 			cpu_arch = CPU_ARCH_UNKNOWN;
+		#endif
 	} else
 		cpu_arch = CPU_ARCH_UNKNOWN;
 

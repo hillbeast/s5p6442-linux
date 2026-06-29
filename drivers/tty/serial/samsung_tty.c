@@ -2422,7 +2422,7 @@ static const struct s3c24xx_serial_drv_data s3c6400_serial_drv_data = {
 #define S3C6400_SERIAL_DRV_DATA NULL
 #endif
 
-#ifdef CONFIG_CPU_S5PV210
+#if defined(CONFIG_CPU_S5PV210) || defined(CONFIG_ARCH_S5P6442)
 static const struct s3c24xx_serial_drv_data s5pv210_serial_drv_data = {
 	.info = {
 		.name		= "Samsung S5PV210 UART",
@@ -2575,6 +2575,9 @@ static const struct platform_device_id s3c24xx_serial_driver_ids[] = {
 		.name		= "s3c6400-uart",
 		.driver_data	= (kernel_ulong_t)S3C6400_SERIAL_DRV_DATA,
 	}, {
+		.name		= "s5p6442-uart",
+		.driver_data	= (kernel_ulong_t)S5PV210_SERIAL_DRV_DATA,
+	}, {
 		.name		= "s5pv210-uart",
 		.driver_data	= (kernel_ulong_t)S5PV210_SERIAL_DRV_DATA,
 	}, {
@@ -2604,6 +2607,8 @@ MODULE_DEVICE_TABLE(platform, s3c24xx_serial_driver_ids);
 static const struct of_device_id s3c24xx_uart_dt_match[] = {
 	{ .compatible = "samsung,s3c6400-uart",
 		.data = S3C6400_SERIAL_DRV_DATA },
+	{ .compatible = "samsung,s5p6442-uart",
+		.data = S5PV210_SERIAL_DRV_DATA },
 	{ .compatible = "samsung,s5pv210-uart",
 		.data = S5PV210_SERIAL_DRV_DATA },
 	{ .compatible = "samsung,exynos4210-uart",

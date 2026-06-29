@@ -90,7 +90,7 @@
 		};
 
 		clocks: clock-controller@e0100000 { // FIXED
-			compatible = "samsung,s5pv210-clock";
+			compatible = "samsung,s5p6442-clock";
 			reg = <0xe0100000 0x10000>; // FIXED
 			clock-names = "xxti", "xusbxti";
 			clocks = <&xxti>, <&xusbxti>;
