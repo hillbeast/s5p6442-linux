@@ -31,7 +31,7 @@ static int __init s5p6442_fdt_map_sys(unsigned long node, const char *uname,
 	const __be32 *reg;
 	int len;
 
-	if (!of_flat_dt_is_compatible(node, "samsung,s5pv210-clock"))
+	if (!of_flat_dt_is_compatible(node, "samsung,s5p6442-clock"))
 		return 0;
 
 	reg = of_get_flat_dt_prop(node, "reg", &len);
@@ -72,7 +72,7 @@ static char const *const s5p6442_compat[] __initconst = {
 
 void __init s5p6442_fixup(struct tag *t, char **from)
 {
-	early_print("s5p6442_fixup() entered\n");
+	early_print("s5p6442_fixup() entered\n");	
 	memblock_add(PHYS_OFFSET, APOLLO_PHYS_SIZE_DDR);
 }
 

@@ -1310,6 +1310,8 @@ static const struct of_device_id samsung_pinctrl_dt_match[] = {
 		.data = &exynos5420_of_data },
 	{ .compatible = "samsung,s5pv210-pinctrl",
 		.data = &s5pv210_of_data },
+	{ .compatible = "samsung,s5p6442-pinctrl",
+		.data = &s5p6442_of_data },
 #endif
 #ifdef CONFIG_PINCTRL_EXYNOS_ARM64
 	{ .compatible = "google,gs101-pinctrl",

@@ -577,6 +577,19 @@ config DRM_PANEL_SAMSUNG_DB7430
 	  DB7430 DPI display controller used in such devices as the
 	  LMS397KF04 480x800 DPI panel.
 
+config DRM_PANEL_SAMSUNG_S6D04D1
+	tristate "Samsung S6D04D1 RGB panel"
+	depends on OF
+	depends on BACKLIGHT_CLASS_DEVICE
+	select DRM_MIPI_DBI
+
+	help
+	  Say Y here if you want to enable support for Samsung S6D04D1
+	  TFT LCD panel.
+	  
+	  This panel can be found in Samsung Galaxy GT-i5800 Apollo
+	  mobile phone.
+
 config DRM_PANEL_SAMSUNG_S6D16D0
 	tristate "Samsung S6D16D0 DSI video mode panel"
 	depends on OF

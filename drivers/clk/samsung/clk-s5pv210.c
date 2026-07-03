@@ -711,6 +711,10 @@ static const struct samsung_clock_alias s5pv210_aliases[] __initconst = {
 	ALIAS(MOUT_DMC0, NULL, "sclk_dmc0"),
 };
 
+static const struct samsung_clock_alias s5p6442_aliases[] __initconst = {
+	ALIAS(DOUT_APLL, NULL, "armclk"),
+};
+
 /* S5PV210-specific PLLs. */
 static const struct samsung_pll_clock s5pv210_pll_clks[] __initconst = {
 	[apll] = PLL(pll_4508, FOUT_APLL, "fout_apll", "fin_pll",
@@ -780,8 +784,13 @@ static void __init __s5pv210_clk_init(struct device_node *np,
 	samsung_clk_register_fixed_factor(ctx, ffactor_clks,
 						ARRAY_SIZE(ffactor_clks));
 
-	samsung_clk_register_alias(ctx, s5pv210_aliases,
-						ARRAY_SIZE(s5pv210_aliases));
+	if (is_s5p6442) {
+		samsung_clk_register_alias(ctx, s5p6442_aliases,
+							ARRAY_SIZE(s5p6442_aliases));
+	} else {
+		samsung_clk_register_alias(ctx, s5pv210_aliases,
+							ARRAY_SIZE(s5pv210_aliases));
+	}
 
 	samsung_clk_sleep_init(reg_base, s5pv210_clk_regs,
 			       ARRAY_SIZE(s5pv210_clk_regs));

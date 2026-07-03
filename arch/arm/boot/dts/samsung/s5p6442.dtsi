@@ -103,7 +103,7 @@
 		};
 
 		pinctrl0: pinctrl@e0200000 { // FIXED
-			compatible = "samsung,s5pv210-pinctrl";
+			compatible = "samsung,s5p6442-pinctrl";
 			reg = <0xe0200000 0x1000>; // FIXED
 			interrupt-parent = <&vic0>; // FIXED
 			interrupts = <30>; // FIXED
@@ -149,10 +149,10 @@
 			pinctrl-0 = <&spi0_bus>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-			status = "disabled";
+			status = "okay";
 		};
 
-		spi1: spi@ec400000 { // FIXED
+		spi1: spi@ec400000 { // UNSURE IF THIS EXISTS - NO IRQ OR GPIO IN PREVIOUS KERNEL
 			compatible = "samsung,s5pv210-spi";
 			reg = <0xec400000 0x1000>; // FIXED
 			interrupt-parent = <&vic1>; // ASSUMED
@@ -343,7 +343,7 @@
 			status = "disabled";
 		};
 
-		sdhci1: mmc@ed900000 { // FIXED
+		sdhci1: mmc@ed900000 { // FIXED - WIFI
 			compatible = "samsung,s3c6410-sdhci";
 			reg = <0xed900000 0x100000>; // FIXED
 			interrupt-parent = <&vic1>; // FIXED
@@ -354,7 +354,7 @@
 			status = "disabled";
 		};
 
-		sdhci2: mmc@eda00000 { // FIXED
+		sdhci2: mmc@eda00000 { // FIXED - MMC
 			compatible = "samsung,s3c6410-sdhci";
 			reg = <0xeda00000 0x100000>; // FIXED
 			interrupt-parent = <&vic1>; // FIXED
@@ -418,7 +418,7 @@
 		};
 
 		fimd: fimd@ee000000 { // FIXED
-			compatible = "samsung,s5pv210-fimd";
+			compatible = "samsung,s5p6442-fimd";
 			interrupt-parent = <&vic2>; // FIXED
 			reg = <0xee000000 0x20000>; // FIXED
 			interrupt-names = "fifo", "vsync", "lcd_sys";

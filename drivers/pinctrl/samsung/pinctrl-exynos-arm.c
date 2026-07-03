@@ -144,6 +144,118 @@ const struct samsung_pinctrl_of_match_data s5pv210_of_data __initconst = {
 	.num_ctrl	= ARRAY_SIZE(s5pv210_pin_ctrl),
 };
 
+static void s5p6442_retention_disable(struct samsung_pinctrl_drv_data *drvdata)
+{
+	void __iomem *clk_base = (void __iomem *)drvdata->retention_ctrl->priv;
+	u32 tmp;
+
+	tmp = __raw_readl(clk_base + S5P_OTHERS);
+	tmp |= (S5P_OTHERS_RET_IO | S5P_OTHERS_RET_CF | S5P_OTHERS_RET_MMC |
+		S5P_OTHERS_RET_UART);
+	__raw_writel(tmp, clk_base + S5P_OTHERS);
+}
+
+static struct samsung_retention_ctrl *
+s5p6442_retention_init(struct samsung_pinctrl_drv_data *drvdata,
+		       const struct samsung_retention_data *data)
+{
+	struct samsung_retention_ctrl *ctrl;
+	struct device_node *np;
+	void __iomem *clk_base;
+
+	ctrl = devm_kzalloc(drvdata->dev, sizeof(*ctrl), GFP_KERNEL);
+	if (!ctrl)
+		return ERR_PTR(-ENOMEM);
+
+	np = of_find_compatible_node(NULL, NULL, "samsung,s5p6442-clock");
+	if (!np) {
+		pr_err("%s: failed to find clock controller DT node\n",
+			__func__);
+		return ERR_PTR(-ENODEV);
+	}
+
+	clk_base = of_iomap(np, 0);
+	of_node_put(np);
+	if (!clk_base) {
+		pr_err("%s: failed to map clock registers\n", __func__);
+		return ERR_PTR(-EINVAL);
+	}
+
+	ctrl->priv = (void __force *)clk_base;
+	ctrl->disable = s5p6442_retention_disable;
+
+	return ctrl;
+}
+
+static const struct samsung_retention_data s5p6442_retention_data __initconst = {
+	.init	 = s5p6442_retention_init,
+};
+
+/* pin banks of s5p6442 pin-controller */
+static const struct samsung_pin_bank_data s5p6442_pin_bank[] __initconst = {
+	/* Must start with EINTG banks, ordered by EINT group number. */
+	EXYNOS_PIN_BANK_EINTG(8, 0x000, "gpa0", 0x00),
+	EXYNOS_PIN_BANK_EINTG(2, 0x020, "gpa1", 0x04),
+	EXYNOS_PIN_BANK_EINTG(4, 0x040, "gpb",  0x08),
+	EXYNOS_PIN_BANK_EINTG(5, 0x060, "gpc0", 0x0c),
+	EXYNOS_PIN_BANK_EINTG(5, 0x080, "gpc1", 0x10),
+	EXYNOS_PIN_BANK_EINTG(2, 0x0a0, "gpd0", 0x14),
+	EXYNOS_PIN_BANK_EINTG(6, 0x0c0, "gpd1", 0x18),
+	EXYNOS_PIN_BANK_EINTG(8, 0x0e0, "gpe0", 0x1c),
+	EXYNOS_PIN_BANK_EINTG(5, 0x100, "gpe1", 0x20),
+	EXYNOS_PIN_BANK_EINTG(8, 0x120, "gpf0", 0x24),
+	EXYNOS_PIN_BANK_EINTG(8, 0x140, "gpf1", 0x28),
+	EXYNOS_PIN_BANK_EINTG(8, 0x160, "gpf2", 0x2c),
+	EXYNOS_PIN_BANK_EINTG(6, 0x180, "gpf3", 0x30),
+	EXYNOS_PIN_BANK_EINTG(7, 0x1a0, "gpg0", 0x34),
+	EXYNOS_PIN_BANK_EINTG(7, 0x1c0, "gpg1", 0x38),
+	EXYNOS_PIN_BANK_EINTG(7, 0x1e0, "gpg2", 0x3c),
+	EXYNOS_PIN_BANK_EINTG(8, 0x200, "gpj0", 0x40),
+	EXYNOS_PIN_BANK_EINTG(6, 0x220, "gpj1", 0x44),
+	EXYNOS_PIN_BANK_EINTG(8, 0x240, "gpj2", 0x48),
+	EXYNOS_PIN_BANK_EINTG(8, 0x260, "gpj3", 0x4c),
+	EXYNOS_PIN_BANK_EINTG(5, 0x280, "gpj4", 0x50),
+	EXYNOS_PIN_BANK_EINTN(8, 0x2a0, "mp01"),
+	EXYNOS_PIN_BANK_EINTN(4, 0x300, "mp02"),
+	EXYNOS_PIN_BANK_EINTN(5, 0x320, "mp03"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x340, "mp04"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x360, "mp05"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x380, "mp06"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x3a0, "mp07"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x3c0, "mp10"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x3e0, "mp11"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x400, "mp12"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x420, "mp13"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x440, "mp14"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x480, "mp15"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x4a0, "mp16"),
+	EXYNOS_PIN_BANK_EINTN(8, 0x4c0, "mp17"),
+	EXYNOS_PIN_BANK_EINTN(7, 0x4e0, "mp18"),
+	EXYNOS_PIN_BANK_EINTW(8, 0xc00, "gph0", 0x00),
+	EXYNOS_PIN_BANK_EINTW(8, 0xc20, "gph1", 0x04),
+	EXYNOS_PIN_BANK_EINTW(8, 0xc40, "gph2", 0x08),
+	EXYNOS_PIN_BANK_EINTW(8, 0xc60, "gph3", 0x0c),
+};
+
+static const struct samsung_pin_ctrl s5p6442_pin_ctrl[] __initconst = {
+	{
+		/* pin-controller instance 0 data */
+		.pin_banks	= s5p6442_pin_bank,
+		.nr_banks	= ARRAY_SIZE(s5p6442_pin_bank),
+		.eint_gpio_init = exynos_eint_gpio_init,
+		.eint_wkup_init = exynos_eint_wkup_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+		.retention_data	= &s5p6442_retention_data,
+	},
+};
+
+
+const struct samsung_pinctrl_of_match_data s5p6442_of_data __initconst = {
+	.ctrl		= s5p6442_pin_ctrl,
+	.num_ctrl	= ARRAY_SIZE(s5p6442_pin_ctrl),
+};
+
 /* Pad retention control code for accessing PMU regmap */
 static atomic_t exynos_shared_retention_refcnt;
 
