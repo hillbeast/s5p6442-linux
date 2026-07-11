@@ -9,9 +9,11 @@
 // Tomasz Figa <t.figa@samsung.com>
 // Mark Kennard <markkennard4@gmail.com>
 
-#include <linux/of_fdt.h>
-#include <linux/platform_device.h>
 #include <linux/memblock.h>
+#include <linux/of_fdt.h>
+#include <linux/of.h>
+#include <linux/of_platform.h>
+#include <linux/platform_device.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -62,6 +64,21 @@ static void s5p6442_restart(enum reboot_mode mode, const char *cmd)
 static void __init s5p6442_init_machine(void)
 {
 	pr_info("%s()\n", __func__);
+
+	struct device_node *np;
+
+    /* Scan standard device tree nodes first */
+    of_platform_default_populate(NULL, NULL, NULL);
+
+    /* Explicitly locate and build the platform device node container */
+    np = of_find_node_by_path("/apollo_hw_rev");
+    if (np) {
+        /* Force bind the node as a platform device instance on the bus */
+        of_platform_device_create(np, NULL, NULL);
+        of_node_put(np); /* Balance the node reference counter */
+    } else {
+        pr_warn("%s: Failed to locate apollo_hw_rev DT node path\n", __func__);
+    }
 }
 
 static void __init s5p6442_init_late(void)

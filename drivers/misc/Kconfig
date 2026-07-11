@@ -574,6 +574,13 @@ config NSM
 	  To compile this driver as a module, choose M here.
 	  The module will be called nsm.
 
+config SAMSUNG_APOLLO_HW
+	tristate "Samsung Apollo Hardware ID"
+	depends on ARCH_S5P6442
+	help
+	  This driver provides support for Samsung Galaxy 3 i5800
+	  (aka Apollo) HW_REV ID GPIOs and bootmode.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

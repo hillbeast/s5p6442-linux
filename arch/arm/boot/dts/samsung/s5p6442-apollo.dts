@@ -54,6 +54,15 @@
 		clock-frequency = <32768>;
 	};
 
+	apollo_hw_rev: apollo_hw_rev {
+		compatible = "samsung,apollo_hw_rev";
+
+		rev-gpios = <&mp05 0 GPIO_ACTIVE_HIGH>,   /* Rev Pin 0 */
+                    <&mp05 1 GPIO_ACTIVE_HIGH>,   /* Rev Pin 1 */
+                    <&mp05 2 GPIO_ACTIVE_HIGH>;   /* Rev Pin 2 */
+        bootmode-gpios = <&gpj3 3 GPIO_ACTIVE_HIGH>;
+	};
+
 	bt_codec: bt-sco {
 		compatible = "linux,bt-sco";
 		#sound-dai-cells = <0>;
@@ -814,11 +823,11 @@
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
 	};
 
-	fg_i2c_pins: fg-i2c-pins {
+/*	fg_i2c_pins: fg-i2c-pins {
 		samsung,pins = "mp05-0", "mp05-1"; // UNKNOWN
 		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
+	}; */
 
 	sound_i2c_pins: sound-i2c-pins {
 		samsung,pins = "mp05-2", "mp05-3"; // UNKNOWN
