@@ -34,7 +34,7 @@ config MTD_ONENAND_OMAP2
 
 config MTD_ONENAND_SAMSUNG
 	tristate "OneNAND on Samsung SOC controller support"
-	depends on ARCH_S3C64XX || ARCH_S5PV210 || COMPILE_TEST
+	depends on ARCH_S3C64XX || ARCH_S5PV210 || COMPILE_TEST || ARCH_S5P6442
 	help
 	  Support for a OneNAND flash device connected to Samsung S3C64XX
 	  (using command mapping method) and S5PC110/S5PC210 (using generic

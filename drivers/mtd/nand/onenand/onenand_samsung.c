@@ -856,7 +856,13 @@ static int s3c_onenand_probe(struct platform_device *pdev)
 	mtd->priv = this;
 	mtd->dev.parent = &pdev->dev;
 	onenand->pdev = pdev;
-	onenand->type = platform_get_device_id(pdev)->driver_data;
+	if (pdev->dev.of_node) {
+		pr_info("s3c_onenand_probe: Using device tree\n");
+        onenand->type = (enum soc_type)of_device_get_match_data(&pdev->dev);
+	} else {
+		pr_info("s3c_onenand_probe: Using platform data\n");
+        onenand->type = platform_get_device_id(pdev)->driver_data;
+	}
 
 	s3c_onenand_setup(mtd);
 
@@ -984,10 +990,19 @@ static const struct platform_device_id s3c_onenand_driver_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, s3c_onenand_driver_ids);
 
+static const struct of_device_id s3c_onenand_of_match[] = {
+    { .compatible = "samsung,s5p6442-onenand",
+	.data = (void *)TYPE_S5PC110 },
+    { },
+};
+
+MODULE_DEVICE_TABLE(of, s3c_onenand_of_match);
+
 static struct platform_driver s3c_onenand_driver = {
 	.driver         = {
 		.name	= "samsung-onenand",
 		.pm	= &s3c_pm_ops,
+        .of_match_table = s3c_onenand_of_match,
 	},
 	.id_table	= s3c_onenand_driver_ids,
 	.probe          = s3c_onenand_probe,

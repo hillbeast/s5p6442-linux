@@ -111,6 +111,7 @@ struct fimd_driver_data {
 	unsigned int has_hw_trigger:1;
 	unsigned int has_trigger_per_te:1;
 	unsigned int has_bgr_support:1;
+	unsigned int has_sysreg:1;
 };
 
 static struct fimd_driver_data s3c64xx_fimd_driver_data = {
@@ -123,6 +124,15 @@ static struct fimd_driver_data s5pv210_fimd_driver_data = {
 	.timing_base = 0x0,
 	.has_shadowcon = 1,
 	.has_clksel = 1,
+};
+
+static struct fimd_driver_data s5p6442_fimd_driver_data = {
+	.timing_base = 0x0,
+	.has_shadowcon = 1,
+	.has_clksel = 1,
+	.has_sysreg = 0,
+	.has_vidoutcon = 1,
+	.has_bgr_support = 1,
 };
 
 static struct fimd_driver_data exynos3_fimd_driver_data = {
@@ -204,7 +214,7 @@ static const struct of_device_id fimd_driver_dt_match[] = {
 	{ .compatible = "samsung,s5pv210-fimd",
 	  .data = &s5pv210_fimd_driver_data },
 	{ .compatible = "samsung,s5p6442-fimd",
-	  .data = &s5pv210_fimd_driver_data },
+	  .data = &s5p6442_fimd_driver_data },
 	{ .compatible = "samsung,exynos3250-fimd",
 	  .data = &exynos3_fimd_driver_data },
 	{ .compatible = "samsung,exynos4210-fimd",
@@ -1223,11 +1233,13 @@ static int fimd_probe(struct platform_device *pdev)
 	}
 	of_node_put(i80_if_timings);
 
-	ctx->sysreg = syscon_regmap_lookup_by_phandle(dev->of_node,
-							"samsung,sysreg");
-	if (IS_ERR(ctx->sysreg)) {
-		dev_warn(dev, "failed to get system register.\n");
-		ctx->sysreg = NULL;
+	if (ctx->driver_data->has_sysreg) {
+		ctx->sysreg = syscon_regmap_lookup_by_phandle(dev->of_node,
+								"samsung,sysreg");
+		if (IS_ERR(ctx->sysreg)) {
+			dev_warn(dev, "failed to get system register.\n");
+			ctx->sysreg = NULL;
+		}
 	}
 
 	ctx->bus_clk = devm_clk_get(dev, "fimd");

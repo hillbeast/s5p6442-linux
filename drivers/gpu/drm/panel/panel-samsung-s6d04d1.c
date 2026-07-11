@@ -1,853 +1,421 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * S6D04D1 TFT LCD drm_panel driver.
- *
- * Copyright (C) 2019 Paweł Chmiel <pawel.mikolaj.chmiel@gmail.com>
- * Derived from drivers/gpu/drm/panel-samsung-ld9040.c
- * Derived from drivers/gpu/drm/panel-samsung-s5e63m0.c
- *
- * Andrzej Hajda <a.hajda@samsung.com>
- * Mark Kennard <markkennard4@gmail.com>
+ * Panel driver for the Samsung S6D04D1 240x400 DPI RGB panel.
+ * Found in the Samsung Galaxy Apollo GT-I5800 mobile phone.
  */
 
 #include <drm/drm_mipi_dbi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
-#include <drm/drm_print.h>
 
-#include <linux/backlight.h>
 #include <linux/delay.h>
-#include <linux/device.h>
 #include <linux/gpio/consumer.h>
+#include <linux/init.h>
+#include <linux/kernel.h>
 #include <linux/media-bus-format.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 
 #include <video/mipi_display.h>
 
-/* Manufacturer Command Set */
-#define MCS_ELVSS_ON		0xb1
-#define MCS_TEMP_SWIRE		0xb2
-#define MCS_PENTILE_1		0xb3
-#define MCS_PENTILE_2		0xb4
-#define MCS_GAMMA_DELTA_Y_RED	0xb5
-#define MCS_GAMMA_DELTA_X_RED	0xb6
-#define MCS_GAMMA_DELTA_Y_GREEN	0xb7
-#define MCS_GAMMA_DELTA_X_GREEN	0xb8
-#define MCS_GAMMA_DELTA_Y_BLUE	0xb9
-#define MCS_GAMMA_DELTA_X_BLUE	0xba
-#define MCS_MIECTL1		0xc0
-#define MCS_BCMODE		0xc1
-#define MCS_ERROR_CHECK		0xd5
-#define MCS_READ_ID1		0xda
-#define MCS_READ_ID2		0xdb
-#define MCS_READ_ID3		0xdc
-#define MCS_LEVEL_2_KEY		0xf0
-#define MCS_MTP_KEY		0xf1
-#define MCS_DISCTL		0xf2
-#define MCS_SRCCTL		0xf6
-#define MCS_IFCTL		0xf7
-#define MCS_PANELCTL		0xf8
-#define MCS_PGAMMACTL		0xfa
+#define S6D04D1_RDDIDIF		0x04	/* Read Display ID */
+#define S6D04D1_WRDISBV		0x51	/* Write Manual Brightness */
+#define S6D04D1_READID1		0xDA	/* Read panel ID 1 */
+#define S6D04D1_READID2		0xDB	/* Read panel ID 2 */
+#define S6D04D1_READID3		0xDC	/* Read panel ID 3 */
+#define S6D04D1_PASSWD_L2	0xF0	/* Password Command for Level 2 Control */
+#define S6D04D1_DISPCTL		0xF2	/* Display Control */
+#define S6D04D1_MANPWR		0xF3	/* Manual Control */
+#define S6D04D1_PWRCTL1		0xF4	/* Power Control */
+#define S6D04D1_SRCCTL		0xF6	/* Source Control */
+#define S6D04D1_PANELCTL	0xF7	/* Panel Control*/
 
-#define S6D04D1_LCD_ID_VALUE_M2		0xA4
-#define S6D04D1_LCD_ID_VALUE_SM2	0xB4
-#define S6D04D1_LCD_ID_VALUE_SM2_1	0xB6
+#define MAX_BRIGHTNESS_LEVEL 0xFF
+#define LOW_BRIGHTNESS_LEVEL 0x1E
 
-#define NUM_GAMMA_LEVELS	28
-#define GAMMA_TABLE_COUNT	23
+#define MAX_BACKLIGHT_VALUE_SMD 0x9B
+#define LOW_BACKLIGHT_VALUE_SMD 0x1F
+#define DIM_BACKLIGHT_VALUE_SMD 0x12
 
-#define MAX_BRIGHTNESS		(NUM_GAMMA_LEVELS - 1)
+#define MAX_BACKLIGHT_VALUE_SONY 0x9B //0xB4
+#define LOW_BACKLIGHT_VALUE_SONY 0x1F
+#define DIM_BACKLIGHT_VALUE_SONY 0x12
 
-/* array of gamma tables for gamma value 2.2 */
-static u8 const s6d04d1_gamma_22[NUM_GAMMA_LEVELS][GAMMA_TABLE_COUNT] = {
-	/* 30 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0xA1, 0x51, 0x7B, 0xCE,
-	  0xCB, 0xC2, 0xC7, 0xCB, 0xBC, 0xDA, 0xDD,
-	  0xD3, 0x00, 0x53, 0x00, 0x52, 0x00, 0x6F, },
-	/* 40 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x97, 0x58, 0x71, 0xCC,
-	  0xCB, 0xC0, 0xC5, 0xC9, 0xBA, 0xD9, 0xDC,
-	  0xD1, 0x00, 0x5B, 0x00, 0x5A, 0x00, 0x7A, },
-	/* 50 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x96, 0x58, 0x72, 0xCB,
-	  0xCA, 0xBF, 0xC6, 0xC9, 0xBA, 0xD6, 0xD9,
-	  0xCD, 0x00, 0x61, 0x00, 0x61, 0x00, 0x83, },
-	/* 60 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x91, 0x5E, 0x6E, 0xC9,
-	  0xC9, 0xBD, 0xC4, 0xC9, 0xB8, 0xD3, 0xD7,
-	  0xCA, 0x00, 0x69, 0x00, 0x67, 0x00, 0x8D, },
-	/* 70 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x8E, 0x62, 0x6B, 0xC7,
-	  0xC9, 0xBB, 0xC3, 0xC7, 0xB7, 0xD3, 0xD7,
-	  0xCA, 0x00, 0x6E, 0x00, 0x6C, 0x00, 0x94, },
-	/* 80 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x89, 0x68, 0x65, 0xC9,
-	  0xC9, 0xBC, 0xC1, 0xC5, 0xB6, 0xD2, 0xD5,
-	  0xC9, 0x00, 0x73, 0x00, 0x72, 0x00, 0x9A, },
-	/* 90 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x89, 0x69, 0x64, 0xC7,
-	  0xC8, 0xBB, 0xC0, 0xC5, 0xB4, 0xD2, 0xD5,
-	  0xC9, 0x00, 0x77, 0x00, 0x76, 0x00, 0xA0, },
-	/* 100 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x86, 0x69, 0x60, 0xC6,
-	  0xC8, 0xBA, 0xBF, 0xC4, 0xB4, 0xD0, 0xD4,
-	  0xC6, 0x00, 0x7C, 0x00, 0x7A, 0x00, 0xA7, },
-	/* 110 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x86, 0x6A, 0x60, 0xC5,
-	  0xC7, 0xBA, 0xBD, 0xC3, 0xB2, 0xD0, 0xD4,
-	  0xC5, 0x00, 0x80, 0x00, 0x7E, 0x00, 0xAD, },
-	/* 120 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x82, 0x6B, 0x5E, 0xC4,
-	  0xC8, 0xB9, 0xBD, 0xC2, 0xB1, 0xCE, 0xD2,
-	  0xC4, 0x00, 0x85, 0x00, 0x82, 0x00, 0xB3, },
-	/* 130 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x8C, 0x6C, 0x60, 0xC3,
-	  0xC7, 0xB9, 0xBC, 0xC1, 0xAF, 0xCE, 0xD2,
-	  0xC3, 0x00, 0x88, 0x00, 0x86, 0x00, 0xB8, },
-	/* 140 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x80, 0x6C, 0x5F, 0xC1,
-	  0xC6, 0xB7, 0xBC, 0xC1, 0xAE, 0xCD, 0xD0,
-	  0xC2, 0x00, 0x8C, 0x00, 0x8A, 0x00, 0xBE, },
-	/* 150 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x80, 0x6E, 0x5F, 0xC1,
-	  0xC6, 0xB6, 0xBC, 0xC0, 0xAE, 0xCC, 0xD0,
-	  0xC2, 0x00, 0x8F, 0x00, 0x8D, 0x00, 0xC2, },
-	/* 160 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x7F, 0x6E, 0x5F, 0xC0,
-	  0xC6, 0xB5, 0xBA, 0xBF, 0xAD, 0xCB, 0xCF,
-	  0xC0, 0x00, 0x94, 0x00, 0x91, 0x00, 0xC8, },
-	/* 170 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x7C, 0x6D, 0x5C, 0xC0,
-	  0xC6, 0xB4, 0xBB, 0xBE, 0xAD, 0xCA, 0xCF,
-	  0xC0, 0x00, 0x96, 0x00, 0x94, 0x00, 0xCC, },
-	/* 180 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x7B, 0x6D, 0x5B, 0xC0,
-	  0xC5, 0xB3, 0xBA, 0xBE, 0xAD, 0xCA, 0xCE,
-	  0xBF,	0x00, 0x99, 0x00, 0x97, 0x00, 0xD0, },
-	/* 190 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x7A, 0x6D, 0x59, 0xC1,
-	  0xC5, 0xB4, 0xB8, 0xBD, 0xAC, 0xC9, 0xCE,
-	  0xBE, 0x00, 0x9D, 0x00, 0x9A, 0x00, 0xD5, },
-	/* 200 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x79, 0x6D, 0x58, 0xC1,
-	  0xC4, 0xB4, 0xB6, 0xBD, 0xAA, 0xCA, 0xCD,
-	  0xBE, 0x00, 0x9F, 0x00, 0x9D, 0x00, 0xD9, },
-	/* 210 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x79, 0x6D, 0x57, 0xC0,
-	  0xC4, 0xB4, 0xB7, 0xBD, 0xAA, 0xC8, 0xCC,
-	  0xBD, 0x00, 0xA2, 0x00, 0xA0, 0x00, 0xDD, },
-	/* 220 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x78, 0x6F, 0x58, 0xBF,
-	  0xC4, 0xB3, 0xB5, 0xBB, 0xA9, 0xC8, 0xCC,
-	  0xBC, 0x00, 0xA6, 0x00, 0xA3, 0x00, 0xE2, },
-	/* 230 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x75, 0x6F, 0x56, 0xBF,
-	  0xC3, 0xB2, 0xB6, 0xBB, 0xA8, 0xC7, 0xCB,
-	  0xBC, 0x00, 0xA8, 0x00, 0xA6, 0x00, 0xE6, },
-	/* 240 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x76, 0x6F, 0x56, 0xC0,
-	  0xC3, 0xB2, 0xB5, 0xBA, 0xA8, 0xC6, 0xCB,
-	  0xBB, 0x00, 0xAA, 0x00, 0xA8, 0x00, 0xE9, },
-	/* 250 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x74, 0x6D, 0x54, 0xBF,
-	  0xC3, 0xB2, 0xB4, 0xBA, 0xA7, 0xC6, 0xCA,
-	  0xBA, 0x00, 0xAD, 0x00, 0xAB, 0x00, 0xED, },
-	/* 260 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x74, 0x6E, 0x54, 0xBD,
-	  0xC2, 0xB0, 0xB5, 0xBA, 0xA7, 0xC5, 0xC9,
-	  0xBA, 0x00, 0xB0, 0x00, 0xAE, 0x00, 0xF1, },
-	/* 270 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x71, 0x6C, 0x50, 0xBD,
-	  0xC3, 0xB0, 0xB4, 0xB8, 0xA6, 0xC6, 0xC9,
-	  0xBB, 0x00, 0xB2, 0x00, 0xB1, 0x00, 0xF4, },
-	/* 280 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x6E, 0x6C, 0x4D, 0xBE,
-	  0xC3, 0xB1, 0xB3, 0xB8, 0xA5, 0xC6, 0xC8,
-	  0xBB, 0x00, 0xB4, 0x00, 0xB3, 0x00, 0xF7, },
-	/* 290 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x71, 0x70, 0x50, 0xBD,
-	  0xC1, 0xB0, 0xB2, 0xB8, 0xA4, 0xC6, 0xC7,
-	  0xBB, 0x00, 0xB6, 0x00, 0xB6, 0x00, 0xFA, },
-	/* 300 cd */
-	{ MCS_PGAMMACTL, 0x02,
-	  0x18, 0x08, 0x24, 0x70, 0x6E, 0x4E, 0xBC,
-	  0xC0, 0xAF, 0xB3, 0xB8, 0xA5, 0xC5, 0xC7,
-	  0xBB, 0x00, 0xB9, 0x00, 0xB8, 0x00, 0xFC, },
-};
-
-#define NUM_ACL_LEVELS 7
-#define ACL_TABLE_COUNT 28
-
-static u8 const s6d04d1_acl[NUM_ACL_LEVELS][ACL_TABLE_COUNT] = {
-	/* NULL ACL */
-	{ MCS_BCMODE,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x00, 0x00, 0x00 },
-	/* 40P ACL */
-	{ MCS_BCMODE,
-	  0x4D, 0x96, 0x1D, 0x00, 0x00, 0x01, 0xDF, 0x00,
-	  0x00, 0x03, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x01, 0x06, 0x0C, 0x11, 0x16, 0x1C, 0x21, 0x26,
-	  0x2B, 0x31, 0x36 },
-	/* 43P ACL */
-	{ MCS_BCMODE,
-	  0x4D, 0x96, 0x1D, 0x00, 0x00, 0x01, 0xDF, 0x00,
-	  0x00, 0x03, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x01, 0x07, 0x0C, 0x12, 0x18, 0x1E, 0x23, 0x29,
-	  0x2F, 0x34, 0x3A },
-	/* 45P ACL */
-	{ MCS_BCMODE,
-	  0x4D, 0x96, 0x1D, 0x00, 0x00, 0x01, 0xDF, 0x00,
-	  0x00, 0x03, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x01, 0x07, 0x0D, 0x13, 0x19, 0x1F, 0x25, 0x2B,
-	  0x31, 0x37, 0x3D },
-	/* 47P ACL */
-	{ MCS_BCMODE,
-	  0x4D, 0x96, 0x1D, 0x00, 0x00, 0x01, 0xDF, 0x00,
-	  0x00, 0x03, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x01, 0x07, 0x0E, 0x14, 0x1B, 0x21, 0x27, 0x2E,
-	  0x34, 0x3B, 0x41 },
-	/* 48P ACL */
-	{ MCS_BCMODE,
-	  0x4D, 0x96, 0x1D, 0x00, 0x00, 0x01, 0xDF, 0x00,
-	  0x00, 0x03, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x01, 0x08, 0x0E, 0x15, 0x1B, 0x22, 0x29, 0x2F,
-	  0x36, 0x3C, 0x43 },
-	/* 50P ACL */
-	{ MCS_BCMODE,
-	  0x4D, 0x96, 0x1D, 0x00, 0x00, 0x01, 0xDF, 0x00,
-	  0x00, 0x03, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x01, 0x08, 0x0F, 0x16, 0x1D, 0x24, 0x2A, 0x31,
-	  0x38, 0x3F, 0x46 },
-};
-
-/* This tells us which ACL level goes with which gamma */
-static u8 const s6d04d1_acl_per_gamma[NUM_GAMMA_LEVELS] = {
-	/* 30 - 60 cd: ACL off/NULL */
-	0, 0, 0, 0,
-	/* 70 - 250 cd: 40P ACL */
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	/* 260 - 300 cd: 50P ACL */
-	6, 6, 6, 6, 6,
-};
-
-/* The ELVSS backlight regulator has 5 levels */
-#define S6D04D1_ELVSS_LEVELS 5
-
-static u8 const s6d04d1_elvss_offsets[S6D04D1_ELVSS_LEVELS] = {
-	0x00,   /* not set */
-	0x0D,   /* 30 cd - 100 cd */
-	0x09,   /* 110 cd - 160 cd */
-	0x07,   /* 170 cd - 200 cd */
-	0x00,   /* 210 cd - 300 cd */
-};
-
-/* This tells us which ELVSS level goes with which gamma */
-static u8 const s6d04d1_elvss_per_gamma[NUM_GAMMA_LEVELS] = {
-	/* 30 - 100 cd */
-	1, 1, 1, 1, 1, 1, 1, 1,
-	/* 110 - 160 cd */
-	2, 2, 2, 2, 2, 2,
-	/* 170 - 200 cd */
-	3, 3, 3, 3,
-	/* 210 - 300 cd */
-	4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+static const u8 s6d04d1_dbi_read_commands[] = {
+	S6D04D1_RDDIDIF,
+	S6D04D1_READID1,
+	S6D04D1_READID2,
+	S6D04D1_READID3,
+	0, /* sentinel */
 };
 
 struct s6d04d1 {
 	struct device *dev;
-	void *transport_data;
-	int (*dcs_read)(struct device *dev, void *trsp, const u8 cmd, u8 *val);
-	int (*dcs_write)(struct device *dev, void *trsp, const u8 *data, size_t len);
+	struct mipi_dbi dbi;
 	struct drm_panel panel;
-	struct backlight_device *bl_dev;
-	u8 lcd_type;
-	u8 elvss_pulse;
-	bool dsi_mode;
-
-	struct regulator_bulk_data supplies[2];
-	struct gpio_desc *reset_gpio;
-
-	/*
-	 * This field is tested by functions directly accessing bus before
-	 * transfer, transfer is skipped if it is set. In case of transfer
-	 * failure or unexpected response the field is set to error value.
-	 * Such construct allows to eliminate many checks in higher level
-	 * functions.
-	 */
-	int error;
+	struct gpio_desc *reset;
+	struct regulator_bulk_data regulators[2];
 };
 
-static const struct drm_display_mode default_mode = {
-	.clock		= 25628,
-	.hdisplay	= 480,
-	.hsync_start	= 480 + 16,
-	.hsync_end	= 480 + 16 + 2,
-	.htotal		= 480 + 16 + 2 + 16,
-	.vdisplay	= 800,
-	.vsync_start	= 800 + 28,
-	.vsync_end	= 800 + 28 + 2,
-	.vtotal		= 800 + 28 + 2 + 1,
-	.width_mm	= 53,
-	.height_mm	= 89,
-	.flags		= DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
+static const struct drm_display_mode s6d04d1_video_mode = {
+	.clock = 6800,
+	.hdisplay = 240,
+	.hsync_start = 240 + 10,
+	.hsync_end = 240 + 10 + 10,
+	.htotal = 240 + 10 + 10 + 24,
+	.vdisplay = 400,
+	.vsync_start = 400 + 4,
+	.vsync_end = 400 + 4 + 2,
+	.vtotal = 400 + 4 + 2 + 12,
+	.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
+	.width_mm = 39, 				
+	.height_mm = 65, 				
 };
 
-static inline struct s6d04d1 *panel_to_s6d04d1(struct drm_panel *panel)
+static inline struct s6d04d1 *to_s6d04d1(struct drm_panel *panel)
 {
 	return container_of(panel, struct s6d04d1, panel);
 }
 
-static int s6d04d1_clear_error(struct s6d04d1 *ctx)
+struct setting_table {
+	u8 command;	
+	u8 parameters;
+	u8 parameter[15];
+	s32 wait;
+};
+
+static struct setting_table backlight_setting_table[] = {
+	{ S6D04D1_WRDISBV,  1, { 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },   0 }
+};
+
+
+static int s6d04d1_write_setting_table(struct s6d04d1 *ctx, 
+				       struct setting_table *table, 
+				       size_t count)
 {
-	int ret = ctx->error;
-
-	ctx->error = 0;
-	return ret;
-}
-
-static void s6d04d1_dcs_read(struct s6d04d1 *ctx, const u8 cmd, u8 *data)
-{
-	if (ctx->error < 0)
-		return;
-
-	ctx->error = ctx->dcs_read(ctx->dev, ctx->transport_data, cmd, data);
-}
-
-static void s6d04d1_dcs_write(struct s6d04d1 *ctx, const u8 *data, size_t len)
-{
-	if (ctx->error < 0 || len == 0)
-		return;
-
-	ctx->error = ctx->dcs_write(ctx->dev, ctx->transport_data, data, len);
-}
-
-#define s6d04d1_dcs_write_seq_static(ctx, seq ...) \
-	({ \
-		static const u8 d[] = { seq }; \
-		s6d04d1_dcs_write(ctx, d, ARRAY_SIZE(d)); \
-	})
-
-static int s6d04d1_check_lcd_type(struct s6d04d1 *ctx)
-{
-	u8 id1, id2, id3;
+	struct mipi_dbi *dbi = &ctx->dbi;
+	size_t i;
 	int ret;
 
-	s6d04d1_dcs_read(ctx, MCS_READ_ID1, &id1);
-	s6d04d1_dcs_read(ctx, MCS_READ_ID2, &id2);
-	s6d04d1_dcs_read(ctx, MCS_READ_ID3, &id3);
+	for (i = 0; i < count; i++) {
+		/* Force execution through standard MIPI DBI buffers */
+		ret = mipi_dbi_command_buf(dbi, table[i].command, 
+					   table[i].parameter, 
+					   table[i].parameters);
+		if (ret) {
+			dev_err(ctx->dev, "Failed to write cmd 0x%02x: %d\n", 
+				table[i].command, ret);
+			return ret;
+		}
 
-	ret = s6d04d1_clear_error(ctx);
-	if (ret) {
-		dev_err(ctx->dev, "error checking LCD type (%d)\n", ret);
-		ctx->lcd_type = 0x00;
-		return ret;
+		/* Apply the specific hardware pause instruction if specified */
+		if (table[i].wait > 0)
+			msleep(table[i].wait);
 	}
-
-	dev_info(ctx->dev, "MTP ID: %02x %02x %02x\n", id1, id2, id3);
-
-	/*
-	 * We attempt to detect what panel is mounted on the controller.
-	 * The third ID byte represents the desired ELVSS pulse for
-	 * some displays.
-	 */
-	switch (id2) {
-	case S6D04D1_LCD_ID_VALUE_M2:
-		dev_info(ctx->dev, "detected LCD panel AMS397GE MIPI M2\n");
-		ctx->elvss_pulse = id3;
-		break;
-	case S6D04D1_LCD_ID_VALUE_SM2:
-	case S6D04D1_LCD_ID_VALUE_SM2_1:
-		dev_info(ctx->dev, "detected LCD panel AMS397GE MIPI SM2\n");
-		ctx->elvss_pulse = id3;
-		break;
-	default:
-		dev_info(ctx->dev, "unknown LCD panel type %02x\n", id2);
-		/* Default ELVSS pulse level */
-		ctx->elvss_pulse = 0x16;
-		break;
-	}
-
-	ctx->lcd_type = id2;
 
 	return 0;
 }
 
-static void s6d04d1_init(struct s6d04d1 *ctx)
+static int s6d04d1_get_tune(int level)
 {
-	/*
-	 * We do not know why there is a difference in the DSI mode.
-	 * (No datasheet.)
-	 *
-	 * In the vendor driver this sequence is called
-	 * "SEQ_PANEL_CONDITION_SET" or "DCS_CMD_SEQ_PANEL_COND_SET".
-	 */
-	if (ctx->dsi_mode)
-		s6d04d1_dcs_write_seq_static(ctx, MCS_PANELCTL,
-					     0x01, 0x2c, 0x2c, 0x07, 0x07, 0x5f, 0xb3,
-					     0x6d, 0x97, 0x1d, 0x3a, 0x0f, 0x00, 0x00);
+	int tune_value;
+
+	// SMD LCD
+	if(level > MAX_BRIGHTNESS_LEVEL)
+		level = MAX_BRIGHTNESS_LEVEL;
+
+	if(level >= LOW_BRIGHTNESS_LEVEL)
+		tune_value = (level - LOW_BRIGHTNESS_LEVEL) * (MAX_BACKLIGHT_VALUE_SMD-LOW_BACKLIGHT_VALUE_SMD) / (MAX_BRIGHTNESS_LEVEL-LOW_BRIGHTNESS_LEVEL) + LOW_BACKLIGHT_VALUE_SMD;
+	else if(level > 0)
+		tune_value = DIM_BACKLIGHT_VALUE_SMD;
 	else
-		s6d04d1_dcs_write_seq_static(ctx, MCS_PANELCTL,
-					     0x01, 0x27, 0x27, 0x07, 0x07, 0x54, 0x9f,
-					     0x63, 0x8f, 0x1a, 0x33, 0x0d, 0x00, 0x00);
+		tune_value = level;
+	
+	if(tune_value > MAX_BACKLIGHT_VALUE_SMD)
+		tune_value = MAX_BACKLIGHT_VALUE_SMD;			// led_val must be less than or equal to MAX_BACKLIGHT_VALUE
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_DISCTL,
-				     0x02, 0x03, 0x1c, 0x10, 0x10);
-	s6d04d1_dcs_write_seq_static(ctx, MCS_IFCTL,
-				     0x03, 0x00, 0x00);
+	if(level && !tune_value)
+		tune_value = 1;
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_PGAMMACTL,
-				     0x00, 0x18, 0x08, 0x24, 0x64, 0x56, 0x33,
-				     0xb6, 0xba, 0xa8, 0xac, 0xb1, 0x9d, 0xc1,
-				     0xc1, 0xb7, 0x00, 0x9c, 0x00, 0x9f, 0x00,
-				     0xd6);
-	s6d04d1_dcs_write_seq_static(ctx, MCS_PGAMMACTL,
-				     0x01);
+	return tune_value;
+}
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_SRCCTL,
-				     0x00, 0x8e, 0x07);
-	s6d04d1_dcs_write_seq_static(ctx, MCS_PENTILE_1, 0x6c);
+static int s6d04d1_set_brightness(struct s6d04d1 *ctx, int level)
+{
+	unsigned int led_val;
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_GAMMA_DELTA_Y_RED,
-				     0x2c, 0x12, 0x0c, 0x0a, 0x10, 0x0e, 0x17,
-				     0x13, 0x1f, 0x1a, 0x2a, 0x24, 0x1f, 0x1b,
-				     0x1a, 0x17, 0x2b, 0x26, 0x22, 0x20, 0x3a,
-				     0x34, 0x30, 0x2c, 0x29, 0x26, 0x25, 0x23,
-				     0x21, 0x20, 0x1e, 0x1e);
+	led_val = s6d04d1_get_tune(level);
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_GAMMA_DELTA_X_RED,
-				     0x00, 0x00, 0x11, 0x22, 0x33, 0x44, 0x44,
-				     0x44, 0x55, 0x55, 0x66, 0x66, 0x66, 0x66,
-				     0x66, 0x66);
+	// backlight_setting_table.parameter[0] = led_val;
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_GAMMA_DELTA_Y_GREEN,
-				     0x2c, 0x12, 0x0c, 0x0a, 0x10, 0x0e, 0x17,
-				     0x13, 0x1f, 0x1a, 0x2a, 0x24, 0x1f, 0x1b,
-				     0x1a, 0x17, 0x2b, 0x26, 0x22, 0x20, 0x3a,
-				     0x34, 0x30, 0x2c, 0x29, 0x26, 0x25, 0x23,
-				     0x21, 0x20, 0x1e, 0x1e);
+	printk("%s brightness:0x%x\n", __func__, backlight_setting_table[0].parameter[0]);
+	s6d04d1_write_setting_table(ctx, backlight_setting_table, ARRAY_SIZE(backlight_setting_table));
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_GAMMA_DELTA_X_GREEN,
-				     0x00, 0x00, 0x11, 0x22, 0x33, 0x44, 0x44,
-				     0x44, 0x55, 0x55, 0x66, 0x66, 0x66, 0x66,
-				     0x66, 0x66);
+	return 0;
+}
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_GAMMA_DELTA_Y_BLUE,
-				     0x2c, 0x12, 0x0c, 0x0a, 0x10, 0x0e, 0x17,
-				     0x13, 0x1f, 0x1a, 0x2a, 0x24, 0x1f, 0x1b,
-				     0x1a, 0x17, 0x2b, 0x26, 0x22, 0x20, 0x3a,
-				     0x34, 0x30, 0x2c, 0x29, 0x26, 0x25, 0x23,
-				     0x21, 0x20, 0x1e, 0x1e);
+static void s6d04d1_read_mtp_id(struct s6d04d1 *ctx)
+{
+	struct mipi_dbi *dbi = &ctx->dbi;
+	struct spi_device *spi = dbi->spi;
+	struct spi_message msg;
+	struct spi_transfer xfers[2];
+	u8 cmd = 0x04;
+	u8 id_buf[4] = {0};
+	int ret;
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_GAMMA_DELTA_X_BLUE,
-				     0x00, 0x00, 0x11, 0x22, 0x33, 0x44, 0x44,
-				     0x44, 0x55, 0x55, 0x66, 0x66, 0x66, 0x66,
-				     0x66, 0x66);
+	if (!spi)
+		return;
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_BCMODE,
-				     0x4d, 0x96, 0x1d, 0x00, 0x00, 0x01, 0xdf,
-				     0x00, 0x00, 0x03, 0x1f, 0x00, 0x00, 0x00,
-				     0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x06,
-				     0x09, 0x0d, 0x0f, 0x12, 0x15, 0x18);
+	spi_message_init(&msg);
+	memset(xfers, 0, sizeof(xfers));
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_TEMP_SWIRE,
-				     0x10, 0x10, 0x0b, 0x05);
+	xfers[0].tx_buf = &cmd;
+	xfers[0].len = 1;
+	
+	xfers[0].delay.value = 10;
+	xfers[0].delay.unit = SPI_DELAY_UNIT_USECS;
+	spi_message_add_tail(&xfers[0], &msg);
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_MIECTL1,
-				     0x01);
+	xfers[1].rx_buf = id_buf;
+	xfers[1].len = 4;
+	spi_message_add_tail(&xfers[1], &msg);
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_ELVSS_ON,
-				     0x0b);
+	ret = spi_sync(spi, &msg);
+	if (ret) {
+		dev_err(ctx->dev, "SPI sync multi-phase read failed: %d\n", ret);
+		return;
+	}
+
+	pr_info("%s: NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE\n", __func__);
+	pr_info("%s:   SPI DOES NOT APPEAR TO BE BIDIRECTIONAL AND IS RETURNING 0x00\n", __func__);
+	pr_info("%s: NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE\n", __func__);
+	dev_info(ctx->dev, "RDDIDIF: %02x %02x %02x %02x\n",
+		 id_buf[0], id_buf[1], id_buf[2], id_buf[3]);
+
 }
 
 static int s6d04d1_power_on(struct s6d04d1 *ctx)
 {
+	struct mipi_dbi *dbi = &ctx->dbi;
 	int ret;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
-	if (ret < 0)
+	/* Power up */
+	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->regulators),
+				    ctx->regulators);
+	if (ret) {
+		dev_err(ctx->dev, "failed to enable regulators: %d\n", ret);
 		return ret;
+	}
 
-	msleep(25);
+	msleep(20);
 
-	/* Be sure to send a reset pulse */
-	gpiod_set_value(ctx->reset_gpio, 1);
-	msleep(5);
-	gpiod_set_value(ctx->reset_gpio, 0);
+	/* Reset Display */
+	gpiod_set_value_cansleep(ctx->reset, 1);
+	usleep_range(1000, 5000);
+	gpiod_set_value_cansleep(ctx->reset, 0);
+	msleep(20);
+
+	/* Magic startup code from 2.6.32 Kernel Driver */
+	mipi_dbi_command(dbi, 0xF3, 0x80, 0x00, 0x00, 0x0B, 0x33, 0x7F, 0x7F); 													// POWCTL
+	mipi_dbi_command(dbi, 0xF4, 0x6E, 0x6E, 0x7F, 0x7F, 0x33); 																// VCMCTL
+	mipi_dbi_command(dbi, 0xF5, 0x12, 0x00, 0x03, 0xF0, 0x70); 																// SRCCTL
+	mipi_dbi_command(dbi, 0x11);  																							// SLPOUT
 	msleep(120);
+
+	mipi_dbi_command(dbi, 0x36, 0x88); 	 																					// MADCTL
+	mipi_dbi_command(dbi, 0x3A, 0x77); 	 																					// COLMOD
+	msleep(30);
+
+	mipi_dbi_command(dbi, 0xF2, 0x14, 0x14, 0x03, 0x03, 0x04, 0x03, 0x04, 0x10, 0x04, 0x14, 0x14); 	 						// DISCTL
+	mipi_dbi_command(dbi, 0xF6, 0x00, 0x81, 0x30, 0x10); 	 																// IFCTL
+	mipi_dbi_command(dbi, 0xFD, 0x22, 0x01); 	 																			// GATECTL
+	mipi_dbi_command(dbi, 0x51, 0x00);  //BRIGHTNESS	 																	// WRDISBV
+	mipi_dbi_command(dbi, 0x5E, 0x00); 	 																					// WRCABCMB
+	mipi_dbi_command(dbi, 0xCA, 0x80, 0x80, 0x20); 	 																		// MIECTL1
+	mipi_dbi_command(dbi, 0xCB, 0x03); 	 																					// SRBCMODECCTL
+	mipi_dbi_command(dbi, 0xCC, 0x20, 0x01, 0x8F);  																		// MIECTL2
+	mipi_dbi_command(dbi, 0xCD, 0x7C, 0x01); 	 																			// MIECTL3
+	mipi_dbi_command(dbi, 0xF7, 0x00, 0x23, 0x15, 0x15, 0x1C, 0x1D, 0x1D, 0x21, 0x22, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21);	// RPGAMCTL 
+	mipi_dbi_command(dbi, 0xF8, 0x19, 0x00, 0x15, 0x15, 0x1C, 0x1D, 0x1D, 0x21, 0x22, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21); 	// RNGAMCTL 
+	mipi_dbi_command(dbi, 0xF9, 0x00, 0x23, 0x15, 0x15, 0x1C, 0x1C, 0x1B, 0x1F, 0x24, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21); 	// GPGAMCTL 
+	mipi_dbi_command(dbi, 0xFA, 0x19, 0x00, 0x15, 0x15, 0x1C, 0x1C, 0x1B, 0x1F, 0x24, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21); 	// GNGAMCTL 
+	mipi_dbi_command(dbi, 0xFB, 0x00, 0x23, 0x15, 0x15, 0x1A, 0x18, 0x15, 0x17, 0x2E, 0x37, 0x3F, 0x3F, 0x3F, 0x22, 0x21); 	// BPGAMCTL 
+	mipi_dbi_command(dbi, 0xFC, 0x19, 0x00, 0x15, 0x15, 0x1A, 0x18, 0x15, 0x17, 0x2E, 0x37, 0x3F, 0x3F, 0x3F, 0x22, 0x21); 	// BNGAMCTL 
+	mipi_dbi_command(dbi, 0x2A, 0x00, 0x00, 0x00, 0xEF);  	 																// CASET
+	mipi_dbi_command(dbi, 0x2B, 0x00, 0x00, 0x01, 0x8F);  	 																// PASET
+	mipi_dbi_command(dbi, 0x2C);  	 																						// RAMWR
+	mipi_dbi_command(dbi, 0x53, 0x2C);  	 																				// WRCTRLD
+	mipi_dbi_command(dbi, 0x55, 0x00); 	 	 																				// WRCABC
+	mipi_dbi_command(dbi, 0x29);  	 																						// DISPON
+	msleep(120);
+
+	/* lock the level 2 control */
+	mipi_dbi_command(dbi, S6D04D1_PASSWD_L2, 0xA5, 0xA5);
 
 	return 0;
 }
 
 static int s6d04d1_power_off(struct s6d04d1 *ctx)
 {
-	int ret;
-
-	gpiod_set_value(ctx->reset_gpio, 1);
-	msleep(120);
-
-	ret = regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
-	if (ret < 0)
-		return ret;
-
-	return 0;
-}
-
-static int s6d04d1_disable(struct drm_panel *panel)
-{
-	struct s6d04d1 *ctx = panel_to_s6d04d1(panel);
-
-	backlight_disable(ctx->bl_dev);
-
-	s6d04d1_dcs_write_seq_static(ctx, MIPI_DCS_SET_DISPLAY_OFF);
-	msleep(10);
-	s6d04d1_dcs_write_seq_static(ctx, MIPI_DCS_ENTER_SLEEP_MODE);
-	msleep(120);
-
-	return 0;
+	/* Go into RESET and disable regulators */
+	gpiod_set_value_cansleep(ctx->reset, 1);
+	return regulator_bulk_disable(ARRAY_SIZE(ctx->regulators),
+				      ctx->regulators);
 }
 
 static int s6d04d1_unprepare(struct drm_panel *panel)
 {
-	struct s6d04d1 *ctx = panel_to_s6d04d1(panel);
-	int ret;
+	struct s6d04d1 *ctx = to_s6d04d1(panel);
+	struct mipi_dbi *dbi = &ctx->dbi;
 
-	s6d04d1_clear_error(ctx);
+	mipi_dbi_command(dbi, MIPI_DCS_ENTER_SLEEP_MODE);
+	msleep(120);
+	return s6d04d1_power_off(to_s6d04d1(panel));
+}
 
-	ret = s6d04d1_power_off(ctx);
-	if (ret < 0)
-		return ret;
+static int s6d04d1_disable(struct drm_panel *panel)
+{
+	struct s6d04d1 *ctx = to_s6d04d1(panel);
+	struct mipi_dbi *dbi = &ctx->dbi;
+
+	mipi_dbi_command(dbi, MIPI_DCS_SET_DISPLAY_OFF);
+	msleep(25);
 
 	return 0;
 }
 
 static int s6d04d1_prepare(struct drm_panel *panel)
 {
-	struct s6d04d1 *ctx = panel_to_s6d04d1(panel);
-	int ret;
-
-	ret = s6d04d1_power_on(ctx);
-	if (ret < 0)
-		return ret;
-
-	/* Magic to unlock level 2 control of the display */
-	s6d04d1_dcs_write_seq_static(ctx, MCS_LEVEL_2_KEY, 0x5a, 0x5a);
-	/* Magic to unlock MTP reading */
-	s6d04d1_dcs_write_seq_static(ctx, MCS_MTP_KEY, 0x5a, 0x5a);
-
-	ret = s6d04d1_check_lcd_type(ctx);
-	if (ret < 0)
-		return ret;
-
-	s6d04d1_init(ctx);
-
-	ret = s6d04d1_clear_error(ctx);
-
-	if (ret < 0)
-		s6d04d1_unprepare(panel);
-
-	return ret;
+	return s6d04d1_power_on(to_s6d04d1(panel));
 }
 
 static int s6d04d1_enable(struct drm_panel *panel)
 {
-	struct s6d04d1 *ctx = panel_to_s6d04d1(panel);
+	struct s6d04d1 *ctx = to_s6d04d1(panel);
+	struct mipi_dbi *dbi = &ctx->dbi;
 
-	s6d04d1_dcs_write_seq_static(ctx, MIPI_DCS_EXIT_SLEEP_MODE);
-	msleep(120);
-	s6d04d1_dcs_write_seq_static(ctx, MIPI_DCS_SET_DISPLAY_ON);
-	msleep(10);
+	mipi_dbi_command(dbi, MIPI_DCS_SET_DISPLAY_ON);
+	msleep(20);
 
-	s6d04d1_dcs_write_seq_static(ctx, MCS_ERROR_CHECK,
-				     0xE7, 0x14, 0x60, 0x17, 0x0A, 0x49, 0xC3,
-				     0x8F, 0x19, 0x64, 0x91, 0x84, 0x76, 0x20,
-				     0x0F, 0x00);
-
-	backlight_enable(ctx->bl_dev);
+	s6d04d1_read_mtp_id(ctx);
 
 	return 0;
 }
 
 static int s6d04d1_get_modes(struct drm_panel *panel,
-			     struct drm_connector *connector)
+			    struct drm_connector *connector)
 {
+	struct s6d04d1 *ctx = to_s6d04d1(panel);
 	struct drm_display_mode *mode;
 	static const u32 bus_format = MEDIA_BUS_FMT_RGB888_1X24;
 
-	mode = drm_mode_duplicate(connector->dev, &default_mode);
+	mode = drm_mode_duplicate(connector->dev, &s6d04d1_video_mode);
 	if (!mode) {
-		dev_err(panel->dev, "failed to add mode %ux%u@%u\n",
-			default_mode.hdisplay, default_mode.vdisplay,
-			drm_mode_vrefresh(&default_mode));
+		dev_err(ctx->dev, "failed to add mode\n");
 		return -ENOMEM;
 	}
 
+	connector->display_info.bpc = 8;
 	connector->display_info.width_mm = mode->width_mm;
 	connector->display_info.height_mm = mode->height_mm;
+	connector->display_info.bus_flags =
+		DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
 	drm_display_info_set_bus_formats(&connector->display_info,
 					 &bus_format, 1);
-	connector->display_info.bus_flags = DRM_BUS_FLAG_DE_LOW |
-		DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
 
 	drm_mode_set_name(mode);
-
 	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+
 	drm_mode_probed_add(connector, mode);
 
 	return 1;
 }
 
 static const struct drm_panel_funcs s6d04d1_drm_funcs = {
-	.disable	= s6d04d1_disable,
-	.unprepare	= s6d04d1_unprepare,
-	.prepare	= s6d04d1_prepare,
-	.enable		= s6d04d1_enable,
-	.get_modes	= s6d04d1_get_modes,
+	.disable = s6d04d1_disable,
+	.unprepare = s6d04d1_unprepare,
+	.prepare = s6d04d1_prepare,
+	.enable = s6d04d1_enable,
+	.get_modes = s6d04d1_get_modes,
 };
 
-static int s6d04d1_set_brightness(struct backlight_device *bd)
+static int s6d04d1_probe(struct spi_device *spi)
 {
-	struct s6d04d1 *ctx = bl_get_data(bd);
-	int brightness = bd->props.brightness;
-	u8 elvss_val;
-	u8 elvss_cmd_set[5];
-	int i;
-
-	/* Adjust ELVSS to candela level */
-	i = s6d04d1_elvss_per_gamma[brightness];
-	elvss_val = ctx->elvss_pulse + s6d04d1_elvss_offsets[i];
-	if (elvss_val > 0x1f)
-		elvss_val = 0x1f;
-	elvss_cmd_set[0] = MCS_TEMP_SWIRE;
-	elvss_cmd_set[1] = elvss_val;
-	elvss_cmd_set[2] = elvss_val;
-	elvss_cmd_set[3] = elvss_val;
-	elvss_cmd_set[4] = elvss_val;
-	s6d04d1_dcs_write(ctx, elvss_cmd_set, 5);
-
-	/* Update the ACL per gamma value */
-	i = s6d04d1_acl_per_gamma[brightness];
-	s6d04d1_dcs_write(ctx, s6d04d1_acl[i],
-			  ARRAY_SIZE(s6d04d1_acl[i]));
-
-	/* Update gamma table */
-	s6d04d1_dcs_write(ctx, s6d04d1_gamma_22[brightness],
-			  ARRAY_SIZE(s6d04d1_gamma_22[brightness]));
-	s6d04d1_dcs_write_seq_static(ctx, MCS_PGAMMACTL, 0x03);
-
-
-	return s6d04d1_clear_error(ctx);
-}
-
-static const struct backlight_ops s6d04d1_backlight_ops = {
-	.update_status	= s6d04d1_set_brightness,
-};
-
-static int s6d04d1_backlight_register(struct s6d04d1 *ctx, u32 max_brightness)
-{
-	struct backlight_properties props = {
-		.type		= BACKLIGHT_RAW,
-		.brightness	= max_brightness,
-		.max_brightness = max_brightness,
-	};
-	struct device *dev = ctx->dev;
-	int ret = 0;
-
-	ctx->bl_dev = devm_backlight_device_register(dev, "panel", dev, ctx,
-						     &s6d04d1_backlight_ops,
-						     &props);
-	if (IS_ERR(ctx->bl_dev)) {
-		ret = PTR_ERR(ctx->bl_dev);
-		dev_err(dev, "error registering backlight device (%d)\n", ret);
-	}
-
-	return ret;
-}
-
-int s6d04d1_probe(struct device *dev, void *trsp,
-		  int (*dcs_read)(struct device *dev, void *trsp, const u8 cmd, u8 *val),
-		  int (*dcs_write)(struct device *dev, void *trsp, const u8 *data, size_t len),
-		  bool dsi_mode)
-{
+	struct device *dev = &spi->dev;
 	struct s6d04d1 *ctx;
-	u32 max_brightness;
 	int ret;
 
-	pr_info("%s called\n", __func__);
-
-	ctx = devm_kzalloc(dev, sizeof(struct s6d04d1), GFP_KERNEL);
+	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
-	ctx->transport_data = trsp;
-	ctx->dsi_mode = dsi_mode;
-	ctx->dcs_read = dcs_read;
-	ctx->dcs_write = dcs_write;
-	dev_set_drvdata(dev, ctx);
-
 	ctx->dev = dev;
 
-	ret = device_property_read_u32(dev, "max-brightness", &max_brightness);
+	ctx->regulators[0].supply = "vci";
+	ctx->regulators[1].supply = "vdd3";
+	ret = devm_regulator_bulk_get(dev,
+				      ARRAY_SIZE(ctx->regulators),
+				      ctx->regulators);
 	if (ret)
-		max_brightness = MAX_BRIGHTNESS;
-	if (max_brightness > MAX_BRIGHTNESS) {
-		dev_err(dev, "illegal max brightness specified\n");
-		max_brightness = MAX_BRIGHTNESS;
+		return dev_err_probe(dev, ret, "failed to get regulators\n");
+
+	ctx->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(ctx->reset)) {
+		ret = PTR_ERR(ctx->reset);
+		return dev_err_probe(dev, ret, "no RESET GPIO\n");
 	}
 
-	ctx->supplies[0].supply = "vdd3";
-	ctx->supplies[1].supply = "vci";
-	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(ctx->supplies),
-				      ctx->supplies);
-	if (ret < 0) {
-		dev_err(dev, "failed to get regulators: %d\n", ret);
-		return ret;
-	}
+	spi->mode |= SPI_3WIRE;
 
-	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
-	if (IS_ERR(ctx->reset_gpio)) {
-		dev_err(dev, "cannot get reset-gpios %ld\n", PTR_ERR(ctx->reset_gpio));
-		return PTR_ERR(ctx->reset_gpio);
-	}
+	ret = spi_setup(spi);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to apply 3-wire SPI configuration\n");
+
+	ret = mipi_dbi_spi_init(spi, &ctx->dbi, NULL);
+	if (ret)
+		return dev_err_probe(dev, ret, "MIPI DBI init failed\n");
+
+	ctx->dbi.read_commands = s6d04d1_dbi_read_commands;
 
 	drm_panel_init(&ctx->panel, dev, &s6d04d1_drm_funcs,
-		       dsi_mode ? DRM_MODE_CONNECTOR_DSI :
 		       DRM_MODE_CONNECTOR_DPI);
 
-	ret = s6d04d1_backlight_register(ctx, max_brightness);
-	if (ret < 0)
-		return ret;
+	ret = drm_panel_of_backlight(&ctx->panel);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to add backlight\n");
 
+	spi_set_drvdata(spi, ctx);
 	drm_panel_add(&ctx->panel);
 
 	return 0;
 }
 
-EXPORT_SYMBOL_GPL(s6d04d1_probe);
-
-static const u8 s6d04d1_dbi_read_commands[] = {
-	MCS_READ_ID1,
-	MCS_READ_ID2,
-	MCS_READ_ID3,
-	0, /* sentinel */
-};
-
-static int s6d04d1_spi_dcs_read(struct device *dev, void *trsp,
-				const u8 cmd, u8 *data)
+static void s6d04d1_remove(struct spi_device *spi)
 {
-	struct mipi_dbi *dbi = trsp;
-	int ret;
-
-	ret = mipi_dbi_command_read(dbi, cmd, data);
-	if (ret)
-		dev_err(dev, "error on DBI read command %02x\n", cmd);
-
-	return ret;
-}
-
-static int s6d04d1_spi_dcs_write(struct device *dev, void *trsp,
-				 const u8 *data, size_t len)
-{
-	struct mipi_dbi *dbi = trsp;
-	int ret;
-
-	ret = mipi_dbi_command_stackbuf(dbi, data[0], (data + 1), (len - 1));
-	usleep_range(300, 310);
-
-	return ret;
-}
-
-static int s6d04d1_spi_probe(struct spi_device *spi)
-{
-	struct device *dev = &spi->dev;
-	struct mipi_dbi *dbi;
-	int ret;
-
-	pr_info("s6d04d1_spi_probe called\n");
-
-	dbi = devm_kzalloc(dev, sizeof(*dbi), GFP_KERNEL);
-	if (!dbi)
-		return -ENOMEM;
-
-	ret = mipi_dbi_spi_init(spi, dbi, NULL);
-	if (ret)
-		return dev_err_probe(dev, ret, "MIPI DBI init failed\n");
-	/* Register our custom MCS read commands */
-	dbi->read_commands = s6d04d1_dbi_read_commands;
-
-	return s6d04d1_probe(dev, dbi, s6d04d1_spi_dcs_read,
-			     s6d04d1_spi_dcs_write, false);
-}
-
-void s6d04d1_remove(struct device *dev)
-{
-	struct s6d04d1 *ctx = dev_get_drvdata(dev);
+	struct s6d04d1 *ctx = spi_get_drvdata(spi);
 
 	drm_panel_remove(&ctx->panel);
 }
-EXPORT_SYMBOL_GPL(s6d04d1_remove);
 
-static void s6d04d1_spi_remove(struct spi_device *spi)
-{
-	s6d04d1_remove(&spi->dev);
-}
-
-static const struct of_device_id s6d04d1_spi_of_match[] = {
-	{ .compatible = "samsung,s6d04d1" },
-	{ /* sentinel */ }
+static const struct of_device_id s6d04d1_match[] = {
+	{ .compatible = "samsung,s6d04d1", },
+	{ /* sentinel */ },
 };
+MODULE_DEVICE_TABLE(of, s6d04d1_match);
 
-static const struct spi_device_id s6d04d1_spi_ids[] = {
-    { "s6d04d1", 0 },
-    { "samsung,s6d04d1", 0 },
-    { /* sentinel */ }
-};
-
-MODULE_DEVICE_TABLE(of, s6d04d1_spi_of_match);
-MODULE_DEVICE_TABLE(spi, s6d04d1_spi_ids);
-
-static struct spi_driver s6d04d1_spi_driver = {
-	.probe			= s6d04d1_spi_probe,
-	.remove			= s6d04d1_spi_remove,
-    .id_table		= s6d04d1_spi_ids,
-	.driver			= {
-		.name		= "panel-samsung-s6d04d1",
-		.of_match_table = s6d04d1_spi_of_match,
+static struct spi_driver s6d04d1_driver = {
+	.probe		= s6d04d1_probe,
+	.remove		= s6d04d1_remove,
+	.driver		= {
+		.name	= "s6d04d1-panel",
+		.of_match_table = s6d04d1_match,
 	},
 };
-module_spi_driver(s6d04d1_spi_driver);
+module_spi_driver(s6d04d1_driver);
 
-MODULE_AUTHOR("Paweł Chmiel <pawel.mikolaj.chmiel@gmail.com>");
-MODULE_DESCRIPTION("s6d04d1 LCD Driver");
+MODULE_AUTHOR("Mark Kennard <markkennard4@gmail.com>");
+MODULE_DESCRIPTION("Samsung S6D04D1 panel driver");
 MODULE_LICENSE("GPL v2");

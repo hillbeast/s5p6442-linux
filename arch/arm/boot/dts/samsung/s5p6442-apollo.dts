@@ -233,9 +233,9 @@
 				};
 
 				ldo5_reg: LDO5 { // CONFIRMED
-					regulator-name = "VTF_2.8V";
-					regulator-min-microvolt = <2800000>;
-					regulator-max-microvolt = <2800000>;
+					regulator-name = "VTF_3.3V";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <3300000>;
 
 					regulator-state-mem {
 						regulator-off-in-suspend;
@@ -243,26 +243,16 @@
 				};
 
 				ldo6_reg: LDO6 { // CONFIRMED
-					regulator-name = "VLCD_1.8V";
-					regulator-min-microvolt = <1800000>;
-					regulator-max-microvolt = <1800000>;
-
-					regulator-state-mem {
-						regulator-off-in-suspend;
-					};
-				};
-
-				/* ldo7_reg: LDO7 { // MAYBE?
-					regulator-name = "VADC_3.3V";
+					regulator-name = "VCC_3.3V";
 					regulator-min-microvolt = <3300000>;
 					regulator-max-microvolt = <3300000>;
 
 					regulator-state-mem {
 						regulator-off-in-suspend;
 					};
-				}; */
+				};
 
-				ldo7_reg: LDO7 { // MAYBE?
+				ldo7_reg: LDO7 { // CONFIRMED
 					regulator-name = "VLCD_2.8V";
 					regulator-min-microvolt = <2800000>;
 					regulator-max-microvolt = <2800000>;
@@ -282,7 +272,7 @@
 					};
 				};
 
-				ldo9_reg: LDO9 { // UNKNOWN
+				ldo9_reg: LDO9 { // LIKELY
 					regulator-name = "VCC_2.8V_PDA";
 					regulator-min-microvolt = <2800000>;
 					regulator-max-microvolt = <2800000>;
@@ -567,6 +557,7 @@
 		sck-gpios = <&mp04 1 GPIO_ACTIVE_HIGH>; // CONFIRMED
 		mosi-gpios = <&mp04 3 GPIO_ACTIVE_HIGH>; // CONFIRMED
 		cs-gpios = <&mp01 1 GPIO_ACTIVE_HIGH>; // CONFIRMED
+		spi-3wire;
 		num-chipselects = <1>;
 
 		pinctrl-names = "default";
@@ -575,9 +566,11 @@
 		panel@0 {
 			compatible = "s6d04d1", "samsung,s6d04d1";
 			reg = <0>;
+
+			spi-3wire;
 			reset-gpios = <&mp05 5 GPIO_ACTIVE_LOW>; // CONFIRMED
-			vdd3-supply = <&ldo7_reg>;
-			vci-supply = <&ldo17_reg>;
+			vdd3-supply = <&ldo11_reg>;
+			vci-supply = <&ldo12_reg>;
 			spi-max-frequency = <1200000>;
 
 			pinctrl-names = "default";
@@ -593,7 +586,7 @@
 };
 
 &adc {
-	vdd-supply = <&ldo4_reg>;
+//	vdd-supply = <&ldo4_reg>;
 
 	status = "okay";
 
@@ -607,11 +600,11 @@
 
 &fimd {
 	pinctrl-names = "default";
-	pinctrl-0 = <&lcd_clk &lcd_data24>;
+	pinctrl-0 = <&lcd_ctrl &lcd_sync &lcd_clk &lcd_data24>;
 	status = "okay";
 
-	samsung,invert-vden;
-	samsung,invert-vclk;
+//	samsung,invert-vden = <0>;
+	samsung,invert-vclk = <1>;
 
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -869,6 +862,7 @@
 	cap-mmc-highspeed;
 	keep-power-in-suspend;
 
+	vmmc-supply = <&ldo4_reg>;
 	mmc-pwrseq = <&wifi_pwrseq>;
 	non-removable;
 	status = "okay";
@@ -880,7 +874,7 @@
 	wlan@1 {
 		reg = <1>;
 		compatible = "brcm,bcm4329-fmac";
-		interrupt-parent = <&gph2>;
+		interrupt-parent = <&gph2>; // CONFIRMED
 		interrupts = <4 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-names = "host-wake";
 	};

@@ -71,9 +71,9 @@
 		ranges;
 
 		onenand: onenand@b0600000 { // FIXED
-			compatible = "samsung,s5pv210-onenand";
-			reg = <0xb0600000 0x2000>, // ASSUMED
-				<0xb0000000 0x20000>, // FIXED
+			compatible = "samsung,s5p6442-onenand";
+			reg = <0xb0000000 0x20000>, // FIXED
+				<0xb0600000 0x2000>, // ASSUMED
 				<0xb0040000 0x20000>; // ASSUMED
 			interrupt-parent = <&vic1>; // FIXED
 			interrupts = <31>; // FIXED
@@ -81,7 +81,7 @@
 			clock-names = "bus", "onenand";
 			#address-cells = <1>;
 			#size-cells = <1>;
-			status = "disabled";
+			status = "disabled"; // FIXME: Disabled
 		};
 
 		chipid@e0000000 {
@@ -425,6 +425,9 @@
 			interrupts = <0>, <1>, <2>; // FIXED
 			clocks = <&clocks SCLK_FIMD>, <&clocks CLK_FIMD>;
 			clock-names = "sclk_fimd", "fimd";
+			assigned-clocks = <&clocks MOUT_FIMD>, <&clocks SCLK_FIMD>;
+			assigned-clock-parents = <&clocks MOUT_MPLL>, <&clocks MOUT_FIMD>;
+			assigned-clock-rates = <0>, <166000000>;
 			status = "disabled";
 		};
 

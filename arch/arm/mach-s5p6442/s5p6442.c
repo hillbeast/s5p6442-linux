@@ -59,21 +59,16 @@ static void s5p6442_restart(enum reboot_mode mode, const char *cmd)
 	__raw_writel(0x1, S5P_SWRESET);
 }
 
-static void __init s5p6442_init_late(void)
+static void __init s5p6442_init_machine(void)
 {
-	platform_device_register_simple("s5pv210-cpufreq", -1, NULL, 0);
-	s5pv210_pm_init();
+	pr_info("%s()\n", __func__);
 }
 
-static char const *const s5p6442_compat[] __initconst = {
-	"samsung,s5p6442",
-	NULL
-};
-
-void __init s5p6442_fixup(struct tag *t, char **from)
+static void __init s5p6442_init_late(void)
 {
-	early_print("s5p6442_fixup() entered\n");	
-	memblock_add(PHYS_OFFSET, APOLLO_PHYS_SIZE_DDR);
+	pr_info("%s()\n", __func__);
+	platform_device_register_simple("s5pv210-cpufreq", -1, NULL, 0);
+	s5pv210_pm_init();
 }
 
 static char const *const s5p6442_dt_compat[] __initconst = {
@@ -84,8 +79,8 @@ static char const *const s5p6442_dt_compat[] __initconst = {
 DT_MACHINE_START(SMDK6442, "Samsung S5P6442-based board")
 	.dt_compat = s5p6442_dt_compat,
 	.nr_irqs = S5P6442_NR_IRQS,
-	.fixup = s5p6442_fixup,
 	.map_io = s5p6442_map_io,
 	.restart = s5p6442_restart,
+	.init_machine = s5p6442_init_machine,
 	.init_late = s5p6442_init_late,
 MACHINE_END

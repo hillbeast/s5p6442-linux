@@ -3700,7 +3700,7 @@ static int onenand_chip_probe(struct mtd_info *mtd)
 static int onenand_probe(struct mtd_info *mtd)
 {
 	struct onenand_chip *this = mtd->priv;
-	int dev_id, ver_id;
+	int dev_id, ver_id, maf_id;
 	int density;
 	int ret;
 
@@ -3709,9 +3709,14 @@ static int onenand_probe(struct mtd_info *mtd)
 		return ret;
 
 	/* Device and version IDs from Register */
+	maf_id = this->read_word(this->base + ONENAND_REG_MANUFACTURER_ID);
 	dev_id = this->read_word(this->base + ONENAND_REG_DEVICE_ID);
 	ver_id = this->read_word(this->base + ONENAND_REG_VERSION_ID);
 	this->technology = this->read_word(this->base + ONENAND_REG_TECHNOLOGY);
+
+	/* Check manufacturer ID */
+	onenand_check_maf(maf_id);
+
 
 	/* Flash device information */
 	onenand_print_device_info(dev_id, ver_id);
@@ -3739,6 +3744,7 @@ static int onenand_probe(struct mtd_info *mtd)
 	 * mtd->size represents the actual device size.
 	 */
 	this->chipsize = (16 << density) << 20;
+	pr_info("OneNAND chip size: density=%d, chipsize=0x%08x\n", density, (unsigned int)this->chipsize);
 
 	/* OneNAND page size & block size */
 	/* The data buffer size is equal to page size */
@@ -3853,6 +3859,11 @@ int onenand_scan(struct mtd_info *mtd, int maxchips)
 		this->block_markbad = onenand_default_block_markbad;
 	if (!this->scan_bbt)
 		this->scan_bbt = onenand_default_bbt;
+
+	int j = onenand_chip_probe(mtd);
+	if (j) {
+		pr_err("%s: onenand_chip_probe() returned with %d", __func__, j);
+	}
 
 	if (onenand_probe(mtd))
 		return -ENXIO;
@@ -3977,6 +3988,9 @@ int onenand_scan(struct mtd_info *mtd, int maxchips)
 
 	/* Set the bad block marker position */
 	this->badblockpos = ONENAND_BADBLOCK_POS;
+
+	pr_info("%s: badblockpos = %d\n", __func__, this->badblockpos);
+	pr_info("%s: this->chipsize = 0x%08x\n", __func__, (unsigned int)this->chipsize);
 
 	ret = this->scan_bbt(mtd);
 	if ((!FLEXONENAND(this)) || ret)

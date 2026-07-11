@@ -32,6 +32,42 @@ static const struct samsung_pin_bank_type bank_type_alive = {
 	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, },
 };
 
+static const struct samsung_pin_bank_type s5p6442_bank_type_4bit = {
+	.fld_width = { 4, 1, 2, 0 },         /* CON, DAT, PUD, DRV (No DRV) */
+	.reg_offset = { 0x00, 0x04, 0x08, 0x00 },
+};
+
+#define S5P6442_BANK_EINTG(_nr_pins, _offset, _eint_off, _name)	\
+	{							\
+		.type		= &s5p6442_bank_type_4bit,	\
+		.pctl_offset	= _offset,			\
+		.nr_pins	= _nr_pins,			\
+		.eint_func	= 0xf,				\
+		.eint_type	= EINT_TYPE_GPIO,		\
+		.eint_offset	= _eint_off,			\
+		.name		= _name,			\
+	}
+
+#define S5P6442_BANK_NONE(_nr_pins, _offset, _name)		\
+	{							\
+		.type		= &s5p6442_bank_type_4bit,	\
+		.pctl_offset	= _offset,			\
+		.nr_pins	= _nr_pins,			\
+		.eint_type	= EINT_TYPE_NONE,		\
+		.name		= _name,			\
+	}
+
+#define S5P6442_BANK_WKUP(_nr_pins, _offset, _eint_off, _name)	\
+	{							\
+		.type		= &s5p6442_bank_type_4bit,	\
+		.pctl_offset	= _offset,			\
+		.nr_pins	= _nr_pins,			\
+		.eint_func	= 0xf,				\
+		.eint_type	= EINT_TYPE_WKUP,		\
+		.eint_offset	= _eint_off,			\
+		.name		= _name,			\
+	}
+
 /* Retention control for S5PV210 are located at the end of clock controller */
 #define S5P_OTHERS 0xE000
 
@@ -193,48 +229,43 @@ static const struct samsung_retention_data s5p6442_retention_data __initconst = 
 
 /* pin banks of s5p6442 pin-controller */
 static const struct samsung_pin_bank_data s5p6442_pin_bank[] __initconst = {
-	/* Must start with EINTG banks, ordered by EINT group number. */
-	EXYNOS_PIN_BANK_EINTG(8, 0x000, "gpa0", 0x00),
-	EXYNOS_PIN_BANK_EINTG(2, 0x020, "gpa1", 0x04),
-	EXYNOS_PIN_BANK_EINTG(4, 0x040, "gpb",  0x08),
-	EXYNOS_PIN_BANK_EINTG(5, 0x060, "gpc0", 0x0c),
-	EXYNOS_PIN_BANK_EINTG(5, 0x080, "gpc1", 0x10),
-	EXYNOS_PIN_BANK_EINTG(2, 0x0a0, "gpd0", 0x14),
-	EXYNOS_PIN_BANK_EINTG(6, 0x0c0, "gpd1", 0x18),
-	EXYNOS_PIN_BANK_EINTG(8, 0x0e0, "gpe0", 0x1c),
-	EXYNOS_PIN_BANK_EINTG(5, 0x100, "gpe1", 0x20),
-	EXYNOS_PIN_BANK_EINTG(8, 0x120, "gpf0", 0x24),
-	EXYNOS_PIN_BANK_EINTG(8, 0x140, "gpf1", 0x28),
-	EXYNOS_PIN_BANK_EINTG(8, 0x160, "gpf2", 0x2c),
-	EXYNOS_PIN_BANK_EINTG(6, 0x180, "gpf3", 0x30),
-	EXYNOS_PIN_BANK_EINTG(7, 0x1a0, "gpg0", 0x34),
-	EXYNOS_PIN_BANK_EINTG(7, 0x1c0, "gpg1", 0x38),
-	EXYNOS_PIN_BANK_EINTG(7, 0x1e0, "gpg2", 0x3c),
-	EXYNOS_PIN_BANK_EINTG(8, 0x200, "gpj0", 0x40),
-	EXYNOS_PIN_BANK_EINTG(6, 0x220, "gpj1", 0x44),
-	EXYNOS_PIN_BANK_EINTG(8, 0x240, "gpj2", 0x48),
-	EXYNOS_PIN_BANK_EINTG(8, 0x260, "gpj3", 0x4c),
-	EXYNOS_PIN_BANK_EINTG(5, 0x280, "gpj4", 0x50),
-	EXYNOS_PIN_BANK_EINTN(8, 0x2a0, "mp01"),
-	EXYNOS_PIN_BANK_EINTN(4, 0x300, "mp02"),
-	EXYNOS_PIN_BANK_EINTN(5, 0x320, "mp03"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x340, "mp04"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x360, "mp05"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x380, "mp06"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x3a0, "mp07"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x3c0, "mp10"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x3e0, "mp11"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x400, "mp12"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x420, "mp13"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x440, "mp14"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x480, "mp15"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x4a0, "mp16"),
-	EXYNOS_PIN_BANK_EINTN(8, 0x4c0, "mp17"),
-	EXYNOS_PIN_BANK_EINTN(7, 0x4e0, "mp18"),
-	EXYNOS_PIN_BANK_EINTW(8, 0xc00, "gph0", 0x00),
-	EXYNOS_PIN_BANK_EINTW(8, 0xc20, "gph1", 0x04),
-	EXYNOS_PIN_BANK_EINTW(8, 0xc40, "gph2", 0x08),
-	EXYNOS_PIN_BANK_EINTW(8, 0xc60, "gph3", 0x0c),
+/* 1. General Purpose Banks with Standard Ext-Interrupt Handling */
+	S5P6442_BANK_EINTG(8, 0x000, 0,  "gpa0"),
+	S5P6442_BANK_EINTG(2, 0x020, 0,  "gpa1"), /* Shares EINT Group 0 */
+	S5P6442_BANK_EINTG(4, 0x040, 4,  "gpb"),  /* EINT Group 1 */
+	S5P6442_BANK_EINTG(5, 0x060, 8,  "gpc0"), /* EINT Group 2 */
+	S5P6442_BANK_EINTG(5, 0x080, 8,  "gpc1"), /* Shares EINT Group 2 */
+	S5P6442_BANK_EINTG(2, 0x0a0, 12, "gpd0"), /* EINT Group 3 */
+	S5P6442_BANK_EINTG(6, 0x0c0, 12, "gpd1"), /* Shares EINT Group 3 */
+	S5P6442_BANK_EINTG(8, 0x0e0, 16, "gpe0"), /* EINT Group 4 */
+	S5P6442_BANK_EINTG(5, 0x100, 16, "gpe1"), /* Shares EINT Group 4 */
+	S5P6442_BANK_EINTG(8, 0x120, 20, "gpf0"),
+	S5P6442_BANK_EINTG(8, 0x140, 24, "gpf1"),
+	S5P6442_BANK_EINTG(8, 0x160, 28, "gpf2"),
+	S5P6442_BANK_EINTG(6, 0x180, 32, "gpf3"),
+	S5P6442_BANK_EINTG(7, 0x1a0, 36, "gpg0"),
+	S5P6442_BANK_EINTG(7, 0x1c0, 40, "gpg1"),
+	S5P6442_BANK_EINTG(7, 0x1e0, 44, "gpg2"),
+	S5P6442_BANK_EINTG(8, 0x200, 48, "gpj0"),
+	S5P6442_BANK_EINTG(6, 0x220, 52, "gpj1"),
+	S5P6442_BANK_EINTG(8, 0x240, 56, "gpj2"),
+	S5P6442_BANK_EINTG(8, 0x260, 60, "gpj3"),
+	S5P6442_BANK_EINTG(5, 0x280, 64, "gpj4"),
+
+	/* 2. System and Memory Port Banks (Strict 0x40 Pitch - No Interrupts) */
+	S5P6442_BANK_NONE(8,  0x2a0,     "mp01"),
+	S5P6442_BANK_NONE(4,  0x2e0,     "mp02"), /* Corrected base from 0x300 */
+	S5P6442_BANK_NONE(5,  0x320,     "mp03"),
+	S5P6442_BANK_NONE(8,  0x360,     "mp04"), /* Corrected base from 0x340 */
+	S5P6442_BANK_NONE(8,  0x3a0,     "mp05"), /* Corrected base from 0x360 */
+	S5P6442_BANK_NONE(8,  0x3e0,     "mp06"), /* Corrected base from 0x380 */
+	S5P6442_BANK_NONE(8,  0x420,     "mp07"), /* Corrected base from 0x3a0 */
+
+	/* 3. Wakeup Domain Banks (Explicit Separate Register Area) */
+	S5P6442_BANK_WKUP(8,  0xc00, 0,  "gph0"),
+	S5P6442_BANK_WKUP(8,  0xc20, 4,  "gph1"),
+	S5P6442_BANK_WKUP(8,  0xc40, 8,  "gph2"),
+	S5P6442_BANK_WKUP(8,  0xc60, 12, "gph3"),
 };
 
 static const struct samsung_pin_ctrl s5p6442_pin_ctrl[] __initconst = {
