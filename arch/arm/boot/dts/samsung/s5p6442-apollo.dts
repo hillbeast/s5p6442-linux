@@ -19,11 +19,10 @@
 		i2c4 = &i2c_sound;
 		i2c5 = &i2c_accel;
 		i2c6 = &i2c_pmic;
-		i2c7 = &i2c_musb;
-		i2c8 = &i2c_prox;
-//		i2c9 = &i2c_fuel;
-//		i2c10 = &i2c_touchkey;
-//		i2c12 = &i2c_magnetometer;
+		i2c7 = &i2c_prox;
+//		i2c8 = &i2c_fuel;
+//		i2c9 = &i2c_touchkey;
+//		i2c10 = &i2c_magnetometer;
 	};
 
 	memory@20000000 {
@@ -264,6 +263,16 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&pmic_i2c_pins>;
+
+		fsa9480: musb@25 {
+			compatible = "fcs,fsa9480";
+			reg = <0x25>;
+			interrupt-parent = <&gph2>;
+			interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&musb_irq>;
+		};
 
 		pmic@66 {
 			compatible = "maxim,max8998";
@@ -508,28 +517,6 @@
 					regulator-name = "SAFEOUT2";
 				};
 			};
-		};
-	};
-
-	i2c_musb: i2c-gpio-3 {
-		compatible = "i2c-gpio";
-		sda-gpios = <&gpj4 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // FIXED
-		scl-gpios = <&gpj4 3 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // FIXED
-		i2c-gpio,delay-us = <2>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&musb_i2c_pins>;
-
-		fsa9480: musb@25 {
-			compatible = "fcs,fsa9480";
-			reg = <0x25>;
-			interrupt-parent = <&gph2>; // UNKNOWN
-			interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
-
-			pinctrl-names = "default";
-			pinctrl-0 = <&musb_irq>;
 		};
 	};
 
@@ -817,9 +804,9 @@
 	};
 
 	musb_irq: musq-irq-pins {
-		samsung,pins = "gph2-7"; // CONFIRMED
+		samsung,pins = "gph2-7";
 		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
 	};
 
