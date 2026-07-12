@@ -13,6 +13,9 @@
 	compatible = "samsung,apollo", "samsung,s5p6442";
 
 	aliases: aliases {
+		mmc0 = &sdhci2;		// SD Card
+		mmc1 = &sdhci1;		// Wi-Fi
+
 		i2c4 = &i2c_sound;
 		i2c5 = &i2c_accel;
 		i2c6 = &i2c_pmic;
@@ -104,12 +107,27 @@
 
 	wifi_pwrseq: wifi-pwrseq {
 		compatible = "mmc-pwrseq-simple";
-		reset-gpios = <&gpg1 2 GPIO_ACTIVE_LOW>; // CONFIRMED
+//		reset-gpios = <&gpg1 2 GPIO_ACTIVE_HIGH>; // CONFIRMED
+
 		pinctrl-names = "default";
 		pinctrl-0 = <&wlan_gpio_rst>;
 		post-power-on-delay-ms = <500>;
 		power-off-delay-us = <500>;
 	};
+/* Unsure if this was helpful
+	wifi_vmmc: wifi-vmmc {
+		compatible = "regulator-fixed";
+		regulator-name = "v_batt_wlan";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		
+		gpio = <&gpg1 2 GPIO_ACTIVE_HIGH>; 
+		enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
+		
+		startup-delay-us = <20000>; /* Give it a 20ms hardware stabilization window */
+	}; */
 
 	i2c_sound: i2c-gpio-0 {
 		compatible = "i2c-gpio";
@@ -232,9 +250,12 @@
 				};
 
 				ldo4_reg: LDO4 { // CONFIRMED
-					regulator-name = "VBTWL_2.6V";
-					regulator-min-microvolt = <2600000>;
-					regulator-max-microvolt = <2600000>;
+					regulator-name = "VWLAN_3.3V";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+					
+					regulator-always-on;
+        			regulator-boot-on;
 
 					regulator-state-mem {
 						regulator-off-in-suspend;
@@ -689,7 +710,11 @@
 	wlan_gpio_rst: wlan-gpio-rst-pins {
 		samsung,pins = "gpg1-2"; // CONFIRMED
 		samsung,pin-function = <S5P6442_PIN_FUNC_OUTPUT>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
+//		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
+	    samsung,pin-val = <1>;           /* 1 = Hardwired Logic High (3.3V) */
+		samsung,pin-pud = <0>;           /* 0 = Disable pull-up/down (let it drive raw) */
+    	samsung,pin-drv = <3>;           /* 3 = Force maximum hardware drive strength */
+
 	};
 
 	bt_wake: bt-wake-pins { // CONFIRMED
@@ -865,20 +890,21 @@
 
 	bus-width = <4>;
 	max-frequency = <38400000>;
-	pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_bus4 &wifi_wake &wifi_host_wake &wlan_bt_en>;
+	pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_bus4>;
 	pinctrl-names = "default";
 	cap-sd-highspeed;
 	cap-mmc-highspeed;
+	cap-power-off-card;
 	keep-power-in-suspend;
 
-	vmmc-supply = <&ldo4_reg>;
-	mmc-pwrseq = <&wifi_pwrseq>;
+	vmmc-supply = <&wifi_vmmc>;
+	// mmc-pwrseq = <&wifi_pwrseq>;
 	non-removable;
 	status = "okay";
 
-	assigned-clocks = <&clocks MOUT_MMC1>, <&clocks SCLK_MMC1>;
-	assigned-clock-rates = <0>, <50000000>;
-	assigned-clock-parents = <&clocks MOUT_MPLL>;
+//	assigned-clocks = <&clocks MOUT_MMC1>, <&clocks SCLK_MMC1>;
+//	assigned-clock-rates = <0>, <50000000>;
+//	assigned-clock-parents = <&clocks MOUT_MPLL>;
 
 	wlan@1 {
 		reg = <1>;
