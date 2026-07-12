@@ -465,115 +465,45 @@
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
 	}; */ // MAY NOT BE PRESENT ON S5P6442
 
-	keypad_row0: keypad-row-0-pins {
-		samsung,pins = "gph3-0";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_row1: keypad-row-1-pins {
-		samsung,pins = "gph3-1";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_row2: keypad-row-2-pins {
-		samsung,pins = "gph3-2";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_row3: keypad-row-3-pins {
-		samsung,pins = "gph3-3";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_row4: keypad-row-4-pins {
-		samsung,pins = "gph3-4";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_row5: keypad-row-5-pins {
-		samsung,pins = "gph3-5";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_row6: keypad-row-6-pins {
-		samsung,pins = "gph3-6";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_row7: keypad-row-7-pins {
-		samsung,pins = "gph3-7";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_col0: keypad-col-0-pins {
-		samsung,pins = "gph2-0";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_col1: keypad-col-1-pins {
-		samsung,pins = "gph2-1";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_col2: keypad-col-2-pins {
-		samsung,pins = "gph2-2";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_col3: keypad-col-3-pins {
-		samsung,pins = "gph2-3";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_col4: keypad-col-4-pins {
-		samsung,pins = "gph2-4";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_col5: keypad-col-5-pins {
-		samsung,pins = "gph2-5";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
-	keypad_col6: keypad-col-6-pins {
+	gph2_6_key: keypad-gph2-6-pins {
 		samsung,pins = "gph2-6";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
 	};
 
-	keypad_col7: keypad-col-7-pins {
-		samsung,pins = "gph2-7";
-		samsung,pin-function = <S5P6442_PIN_FUNC_3>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
+	gph3_0_key: keypad-gph3-0-pins {
+		samsung,pins = "gph3-0";
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
+		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
+	};
+
+	gph3_4_key: keypad-gph3-4-pins {
+		samsung,pins = "gph3-4";
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
+		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
+	};
+
+	gph3_5_key: keypad-gph3-5-pins {
+		samsung,pins = "gph3-5";
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
+		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
+	};
+
+	gph3_6_key: keypad-gph3-6-pins {
+		samsung,pins = "gph3-6";
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
+		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
+	};
+
+	gph3_7_key: keypad-gph3-7-pins {
+		samsung,pins = "gph3-7";
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
 	};
 

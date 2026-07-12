@@ -81,6 +81,8 @@
 		pinctrl-0 = <&vibrator_ena>;
 	};
 
+	/*
+	// Maybe this is needed in GT-i5801, but GT-i5800 has no touchkeys
 	touchkey_vdd: regulator-fixed-1 {
 		compatible = "regulator-fixed";
 		regulator-name = "VTOUCH_3.3V";
@@ -92,6 +94,61 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchkey_vdd_ena>;
 	};
+	*/
+
+    gpio-keys {
+        compatible = "gpio-keys";
+        pinctrl-names = "default";
+        pinctrl-0 = <&apollo_power_key &apollo_keys>;
+
+		power {
+            label = "Power";
+            gpios = <&gph2 6 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_POWER>;
+            wakeup-source;
+            debounce-interval = <10>;
+        };
+
+        home {
+            label = "Home";
+            gpios = <&gph3 0 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_HOME>;
+            wakeup-source;
+            debounce-interval = <10>;
+        };
+		
+        volume-up {
+            label = "Volume Up";
+            gpios = <&gph3 4 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_VOLUMEUP>;
+            wakeup-source;
+            debounce-interval = <10>;
+        };
+
+        volume-down {
+            label = "Volume Down";
+            gpios = <&gph3 5 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_VOLUMEDOWN>;
+            wakeup-source;
+            debounce-interval = <10>;
+        };
+
+		back {
+            label = "Back";
+            gpios = <&gph3 6 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_BACK>;
+            wakeup-source;
+            debounce-interval = <10>;
+        };
+		
+		menu {
+            label = "Menu";
+            gpios = <&gph3 7 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_MENU>;
+            wakeup-source;
+            debounce-interval = <10>;
+        };
+    };
 
 	gp2a_vled: regulator-fixed-2 {
 		compatible = "regulator-fixed";
@@ -114,7 +171,7 @@
 		post-power-on-delay-ms = <500>;
 		power-off-delay-us = <500>;
 	};
-/* Unsure if this was helpful
+
 	wifi_vmmc: wifi-vmmc {
 		compatible = "regulator-fixed";
 		regulator-name = "v_batt_wlan";
@@ -127,7 +184,7 @@
 		regulator-boot-on;
 		
 		startup-delay-us = <20000>; /* Give it a 20ms hardware stabilization window */
-	}; */
+	};
 
 	i2c_sound: i2c-gpio-0 {
 		compatible = "i2c-gpio";
@@ -863,6 +920,20 @@
 	panel_rst: panel-rst-pins {
 		samsung,pins = "mp05-5"; // CONFIRMED
 		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
+		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
+	};
+
+	apollo_power_key: apollo-power-key {
+		samsung,pins = "gph2-6";
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
+		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
+	};
+
+	apollo_keys: apollo-keys {
+		samsung,pins = "gph3-0", "gph3-4", "gph3-5", "gph3-6", "gph3-7";
+		samsung,pin-function = <S5P6442_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
 	};
 };
