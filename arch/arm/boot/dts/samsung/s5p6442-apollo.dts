@@ -290,8 +290,14 @@
 			max8998,pmic-buck2-dvs-gpio = <&gph0 4 GPIO_ACTIVE_HIGH>; // CONFIRMED
 			max8998,pmic-buck2-dvs-voltage = <1100000>, <1000000>;
 
+			extcon = "&fsa9480";
+
 			pinctrl-names = "default";
 			pinctrl-0 = <&pmic_dvs_pins &pmic_irq>;
+
+			charger {
+				compatible = "maxim,max8998-charger";
+			};
 
 			regulators {
 				ldo2_reg: LDO2 { // CONFIRMED
