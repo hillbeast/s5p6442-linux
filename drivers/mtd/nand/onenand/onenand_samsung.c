@@ -11,6 +11,7 @@
  *	S5PC110: use DMA
  */
 
+#include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
@@ -21,6 +22,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 
 #include "samsung.h"
 
@@ -28,6 +31,7 @@ enum soc_type {
 	TYPE_S3C6400,
 	TYPE_S3C6410,
 	TYPE_S5PC110,
+	TYPE_S5P6442,
 };
 
 #define ONENAND_ERASE_STATUS		0x00
@@ -132,7 +136,10 @@ struct s3c_onenand {
 	unsigned int	(*cmd_map)(unsigned int type, unsigned int val);
 	void __iomem	*dma_addr;
 	unsigned long	phys_base;
+	struct clk	*bus_clk;
+	struct clk	*gate_clk;
 	struct completion	complete;
+	struct gpio_desc	*reset_gpio;
 };
 
 #define CMD_MAP_00(dev, addr)		(dev->cmd_map(MAP_00, ((addr) << 1)))
@@ -263,6 +270,25 @@ static unsigned short s3c_onenand_readw(void __iomem *addr)
 	return value;
 }
 
+static void s5p_onenand_writew(unsigned short value, void __iomem *addr)
+{
+	struct onenand_chip *this = onenand->mtd->priv;
+	unsigned int reg = addr - this->base;
+
+	/* It's used for probing time */
+	switch (reg) {
+	case ONENAND_REG_SYS_CFG1:
+		pr_info("%s: Blocking write of 0x%02x to ONENAND_REG_SYS_CFG1\n", __func__, value);
+		// s3c_write_reg(value, MEM_CFG_OFFSET);
+		return;
+
+	default:
+		break;
+	}
+
+	writew(value, addr);
+}
+
 static void s3c_onenand_writew(unsigned short value, void __iomem *addr)
 {
 	struct onenand_chip *this = onenand->mtd->priv;
@@ -332,7 +358,7 @@ static int s3c_onenand_wait(struct mtd_info *mtd, int state)
 	}
 
 	/* The 20 msec is enough */
-	timeout = jiffies + msecs_to_jiffies(20);
+	timeout = jiffies + msecs_to_jiffies(200);
 	while (time_before(jiffies, timeout)) {
 		stat = s3c_read_reg(INT_ERR_STAT_OFFSET);
 		if (stat & flags)
@@ -491,14 +517,66 @@ static unsigned char *s3c_get_bufferram(struct mtd_info *mtd, int area)
 	return p;
 }
 
+/* It should access 16-bit instead of 8-bit */
+static inline void *memcpy_16(void *dst, const void *src, unsigned int len)
+{
+#if 0
+	void *ret = dst;
+	short *d = dst;
+	const short *s = src;
+
+	len >>= 1;
+	while (len-- > 0)
+		*d++ = *s++;
+	return ret;
+#else
+	void *ret = dst;
+	short *d = dst;
+	const short *s = src;
+
+	for (len >>= 1; len >= 4; len -= 4)
+	{
+		*d++ = *s++;
+		*d++ = *s++;
+		*d++ = *s++;
+		*d++ = *s++;
+	}
+
+	switch(len)
+	{
+		case 4:	 *d++ = *s++;
+		case 3:	 *d++ = *s++;
+		case 2:	 *d++ = *s++;
+		case 1:	 *d++ = *s++;
+	}
+
+    return ret;
+#endif
+}
+
 static int onenand_read_bufferram(struct mtd_info *mtd, int area,
 				  unsigned char *buffer, int offset,
 				  size_t count)
 {
 	unsigned char *p;
 
+	pr_info("%s: Hello!\n", __func__);
+
 	p = s3c_get_bufferram(mtd, area);
-	memcpy(buffer, p + offset, count);
+	// memcpy(buffer, p + offset, count);
+
+	{
+		u16 *dst = (u16 *)buffer;
+		u16 *src = (u16 *)(p + offset);
+		size_t words = count >> 1;
+		size_t i;
+
+		for (i = 0; i < words; i++) {
+			/* Read directly using 16-bit wide steps to match hardware boundaries */
+			dst[i] = __raw_readw(&src[i]); 
+		}
+	}
+
 	return 0;
 }
 
@@ -631,6 +709,8 @@ static int s5pc110_read_bufferram(struct mtd_info *mtd, int area,
 			p += mtd->oobsize;
 	}
 
+	goto normal;
+
 	if (offset & 3 || (size_t) buf & 3 ||
 		!onenand->dma_addr || count != mtd->writesize)
 		goto normal;
@@ -675,7 +755,7 @@ static int s5pc110_read_bufferram(struct mtd_info *mtd, int area,
 
 normal:
 	if (count != mtd->writesize) {
-		/* Copy the bufferram to memory to prevent unaligned access */
+		// Copy the bufferram to memory to prevent unaligned access
 		memcpy_fromio(this->page_buf, p, mtd->writesize);
 		memcpy(buffer, this->page_buf + offset, count);
 	} else {
@@ -688,6 +768,104 @@ normal:
 static int s5pc110_chip_probe(struct mtd_info *mtd)
 {
 	/* Now just return 0 */
+	return 0;
+}
+
+/**
+ * s5p_onenand_read_ecc - return ecc status
+ * @this:		onenand chip structure
+ */
+static inline int s5p_onenand_read_ecc(struct onenand_chip *this)
+{
+	int ecc, i, result = 0;
+
+	if (!FLEXONENAND(this) && !ONENAND_IS_4KB_PAGE(this))
+		return this->read_word(this->base + ONENAND_REG_ECC_STATUS);
+
+	for (i = 0; i < 4; i++) {
+		ecc = this->read_word(this->base + ONENAND_REG_ECC_STATUS + i*2);
+		if (likely(!ecc))
+			continue;
+		if (ecc & FLEXONENAND_UNCORRECTABLE_ERROR)
+			return ONENAND_ECC_2BIT_ALL;
+		else
+			result = ONENAND_ECC_1BIT_ALL;
+	}
+
+	return result;
+}
+
+/**
+ * s5p_onenand_bbt_wait - [DEFAULT] wait until the command is done
+ * @mtd:		MTD device structure
+ * @state:		state to select the max. timeout value
+ *
+ * Wait for command done.
+ */
+static int s5p_onenand_bbt_wait(struct mtd_info *mtd, int state)
+{
+	struct onenand_chip *this = mtd->priv;
+	unsigned long timeout;
+	unsigned int interrupt, ctrl, ecc, addr1, addr8;
+
+	/* The 20 msec is enough */
+	timeout = jiffies + msecs_to_jiffies(20);
+	while (time_before(jiffies, timeout)) {
+		interrupt = this->read_word(this->base + ONENAND_REG_INTERRUPT);
+		if (interrupt & ONENAND_INT_MASTER)
+			break;
+	}
+	/* To get correct interrupt status in timeout case */
+	interrupt = this->read_word(this->base + ONENAND_REG_INTERRUPT);
+	ctrl = this->read_word(this->base + ONENAND_REG_CTRL_STATUS);
+	addr1 = this->read_word(this->base + ONENAND_REG_START_ADDRESS1);
+	addr8 = this->read_word(this->base + ONENAND_REG_START_ADDRESS8);
+
+	if (interrupt & ONENAND_INT_READ || (interrupt & ONENAND_INT_MASTER)) { // if (interrupt & ONENAND_INT_READ) {
+		ecc = s5p_onenand_read_ecc(this);
+		if (ecc & ONENAND_ECC_2BIT_ALL) {
+			printk(KERN_DEBUG "%s: ecc 0x%04x ctrl 0x%04x "
+			       "intr 0x%04x addr1 %#x addr8 %#x\n",
+			       __func__, ecc, ctrl, interrupt, addr1, addr8);
+			return ONENAND_BBT_READ_ECC_ERROR;
+		}
+	} else {
+		void __iomem *base = onenand->dma_addr;
+		
+		pr_err("=== SAMSUNG ONENAND TIMEOUT REGISTER DUMP ===\n");
+		pr_err("MEM_CFG:   @ 0x%08x = 0x%08x\n", base + 0x0000, readl(base + 0x0000)); 
+		pr_err("INT_STAT:  @ 0x%08x = 0x%08x\n", base + 0x0004, readl(base + 0x0004)); // Often tracks raw interrupt lines
+		pr_err("INT_EN:    @ 0x%08x = 0x%08x\n", base + 0x0008, readl(base + 0x0008)); // Ensures IRQ masking hasn't killed it
+		pr_err("CMD_REG:   @ 0x%08x = 0x%08x\n", base + 0x000C, readl(base + 0x000C)); // Last issued command
+		pr_err("CTRL_STAT: @ 0x%08x = 0x%08x\n", base + 0x0010, readl(base + 0x0010)); // State machine internal status
+
+		printk(KERN_ERR "%s: read timeout! ctrl 0x%04x "
+		       "intr 0x%04x addr1 %#x addr8 %#x\n",
+		       __func__, ctrl, interrupt, addr1, addr8);
+		return ONENAND_BBT_READ_FATAL_ERROR;
+	}
+
+	/* Initial bad block case: 0x2400 or 0x0400 */
+	if (ctrl & ONENAND_CTRL_ERROR) {
+		printk(KERN_DEBUG "%s: ctrl 0x%04x intr 0x%04x addr1 %#x "
+		       "addr8 %#x\n", __func__, ctrl, interrupt, addr1, addr8);
+
+		printk(KERN_DEBUG "%s: Clearing flags ctrl and interrupt...\n", __func__);
+   		this->write_word(0, this->base + ONENAND_REG_CTRL_STATUS);
+		/* Also clear the master interrupt status latch */
+		this->write_word(0, this->base + ONENAND_REG_INTERRUPT);
+
+		interrupt = this->read_word(this->base + ONENAND_REG_INTERRUPT);
+		ctrl = this->read_word(this->base + ONENAND_REG_CTRL_STATUS);
+		addr1 = this->read_word(this->base + ONENAND_REG_START_ADDRESS1);
+		addr8 = this->read_word(this->base + ONENAND_REG_START_ADDRESS8);
+
+		printk(KERN_DEBUG "%s: reread ctrl 0x%04x intr 0x%04x addr1 %#x "
+		       "addr8 %#x\n", __func__, ctrl, interrupt, addr1, addr8);
+
+		return ONENAND_BBT_READ_ERROR;
+	}
+
 	return 0;
 }
 
@@ -810,10 +988,15 @@ static void s3c_onenand_setup(struct mtd_info *mtd)
 	} else if (onenand->type == TYPE_S3C6410) {
 		onenand->mem_addr = s3c6410_mem_addr;
 		onenand->cmd_map = s3c64xx_cmd_map;
-	} else if (onenand->type == TYPE_S5PC110) {
-		/* Use generic onenand functions */
+	} else if (onenand->type == TYPE_S5PC110 || onenand->type == TYPE_S5P6442) {
 		this->read_bufferram = s5pc110_read_bufferram;
 		this->chip_probe = s5pc110_chip_probe;
+
+		this->write_word = s5p_onenand_writew;
+//		this->wait = s5p_onenand_wait;
+//		this->scan_bbt = s5p_onenand_scan_bbt;
+		this->bbt_wait = s5p_onenand_bbt_wait;
+
 		return;
 	} else {
 		BUG();
@@ -864,21 +1047,68 @@ static int s3c_onenand_probe(struct platform_device *pdev)
         onenand->type = platform_get_device_id(pdev)->driver_data;
 	}
 
+    pr_info("%s: s3c_onenand_setup()\n", __func__);
 	s3c_onenand_setup(mtd);
 
+    pr_info("%s: onenand->base = devm_platform_get_and_ioremap_resource\n", __func__);
 	onenand->base = devm_platform_get_and_ioremap_resource(pdev, 0, &r);
 	if (IS_ERR(onenand->base))
 		return PTR_ERR(onenand->base);
 
+    pr_info("%s: onenand->phys_base = r->start\n", __func__);
 	onenand->phys_base = r->start;
 
 	/* Set onenand_chip also */
+    pr_info("%s: this->base = onenand->base\n", __func__);
 	this->base = onenand->base;
 
 	/* Use runtime badblock check */
+    pr_info("%s: this->options |= ONENAND_SKIP_UNLOCK_CHECK\n", __func__);
 	this->options |= ONENAND_SKIP_UNLOCK_CHECK;
 
-	if (onenand->type != TYPE_S5PC110) {
+	int ret;
+
+    pr_info("S5P6442_ONENAND: Activating host controller clocks...\n");
+
+    /* Request the clocks from the device tree node */
+    onenand->bus_clk = devm_clk_get_enabled(&pdev->dev, "nandxl");
+    if (IS_ERR(onenand->bus_clk)) {
+        pr_err("S5P6442_ONENAND: Failed to acquire 'nandxl' clock (%ld)\n", PTR_ERR(onenand->bus_clk));
+    } else {
+        ret = clk_prepare_enable(onenand->bus_clk);
+        if (ret)
+            pr_err("S5P6442_ONENAND: Failed to enable 'nandxl' clock: %d\n", ret);
+    }
+
+    onenand->gate_clk = devm_clk_get_enabled(&pdev->dev, "onenand");
+    if (IS_ERR(onenand->gate_clk)) {
+        pr_err("S5P6442_ONENAND: Failed to acquire 'onenand' clock (dout_flash)!\n");
+    } else {
+        ret = clk_prepare_enable(onenand->gate_clk);
+        if (ret)
+            pr_err("S5P6442_ONENAND: Failed to enable 'onenand' clock: %d\n", ret);
+    }
+
+	onenand->reset_gpio = devm_gpiod_get_optional(&pdev->dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(onenand->reset_gpio)) {
+		dev_err(&pdev->dev, "Failed to request reset GPIO\n");
+		return PTR_ERR(onenand->reset_gpio);
+	}
+
+	if (onenand->reset_gpio) {
+		dev_info(&pdev->dev, "Hardware reset GPIO initialized and driven HIGH\n");
+		
+		/* Optional: Explicitly cycle the reset pin to ensure a clean chip boot */
+		gpiod_set_value_cansleep(onenand->reset_gpio, 0); /* Assert Reset (Low) */
+		mdelay(10);
+		gpiod_set_value_cansleep(onenand->reset_gpio, 1); /* De-assert Reset (High) */
+		mdelay(20); /* Allow the flash internal controller to finish initialization */
+	}
+
+
+
+    pr_info("%s: if (onenand->type != TYPE_S5PC110)\n", __func__);
+	if (onenand->type != TYPE_S5PC110 && onenand->type != TYPE_S5P6442) {
 		onenand->ahb_addr = devm_platform_ioremap_resource(pdev, 1);
 		if (IS_ERR(onenand->ahb_addr))
 			return PTR_ERR(onenand->ahb_addr);
@@ -903,6 +1133,18 @@ static int s3c_onenand_probe(struct platform_device *pdev)
 		if (IS_ERR(onenand->dma_addr))
 			return PTR_ERR(onenand->dma_addr);
 
+		if (onenand->type == TYPE_S5P6442) {
+//			onenand->dma_addr = onenand->base + 0x6000;
+			writel(0x02000080, onenand->dma_addr + 0x0000);
+
+
+			pr_info("%s: Type is S5P6442: dma_addr=0x%08x, config @ dma_addr = 0x%08x\n", __func__, onenand->dma_addr, readl(onenand->dma_addr));
+
+
+		} else {
+			pr_info("%s: Type is S5PC110\n", __func__);
+		}
+
 		s5pc110_dma_ops = s5pc110_dma_poll;
 		/* Interrupt support */
 		r = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
@@ -920,21 +1162,32 @@ static int s3c_onenand_probe(struct platform_device *pdev)
 		}
 	}
 
+    pr_info("%s: err = onenand_scan(mtd, 1)\n", __func__);
 	err = onenand_scan(mtd, 1);
 	if (err)
 		return err;
 
-	if (onenand->type != TYPE_S5PC110) {
+    pr_info("%s: if (onenand->type != TYPE_S5PC110) (2nd)\n", __func__);
+	if (onenand->type != (TYPE_S5PC110 || TYPE_S5P6442)) {
 		/* S3C doesn't handle subpage write */
 		mtd->subpage_sft = 0;
 		this->subpagesize = mtd->writesize;
 	}
 
+    pr_info("%s: if (s3c_read_reg(MEM_CFG_OFFSET) & ONENAND_SYS_CFG1_SYNC_READ)\n", __func__);
 	if (s3c_read_reg(MEM_CFG_OFFSET) & ONENAND_SYS_CFG1_SYNC_READ)
 		dev_info(&onenand->pdev->dev, "OneNAND Sync. Burst Read enabled\n");
 
-	err = mtd_device_register(mtd, pdata ? pdata->parts : NULL,
-				  pdata ? pdata->nr_parts : 0);
+	if (pdev->dev.of_node) {
+		pr_info("%s: Passing of_node to mtd core\n", __func__);
+		mtd_set_of_node(mtd, pdev->dev.of_node);
+	}
+
+	err = mtd_device_parse_register(mtd, NULL, NULL,
+					pdata ? pdata->parts : NULL,
+					pdata ? pdata->nr_parts : 0);
+//	err = mtd_device_register(mtd, pdata ? pdata->parts : NULL,
+//				  pdata ? pdata->nr_parts : 0);
 	if (err) {
 		dev_err(&pdev->dev, "failed to parse partitions and register the MTD device\n");
 		onenand_release(mtd);
@@ -986,13 +1239,16 @@ static const struct platform_device_id s3c_onenand_driver_ids[] = {
 	}, {
 		.name		= "s5pc110-onenand",
 		.driver_data	= TYPE_S5PC110,
+	}, {
+		.name		= "s5p6442-onenand",
+		.driver_data	= TYPE_S5P6442,
 	}, { },
 };
 MODULE_DEVICE_TABLE(platform, s3c_onenand_driver_ids);
 
 static const struct of_device_id s3c_onenand_of_match[] = {
     { .compatible = "samsung,s5p6442-onenand",
-	.data = (void *)TYPE_S5PC110 },
+	.data = (void *)TYPE_S5P6442 },
     { },
 };
 

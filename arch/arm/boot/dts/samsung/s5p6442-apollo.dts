@@ -349,6 +349,8 @@
 					regulator-min-microvolt = <3300000>;
 					regulator-max-microvolt = <3300000>;
 
+					regulator-always-on; 
+
 					regulator-state-mem {
 						regulator-off-in-suspend;
 					};
@@ -1032,4 +1034,54 @@
 
 &onenand {
 	status = "okay";
+	partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        partition@180000 {
+            label = "param";
+            reg = <0x00180000 0x00080000>;
+			read-only;
+        };
+
+        partition@a00000 {
+            label = "boot";
+            reg = <0x00a00000 0x00780000>;
+			read-only; // for now
+        };
+
+        partition@1180000 {
+            label = "system";
+            reg = <0x01180000 0x0dc00000>;
+        };
+
+        partition@ed80000 {
+            label = "userdata";
+            reg = <0x0ed80000 0x0ca80000>;
+        };
+
+        partition@1b800000 {
+            label = "cache";
+            reg = <0x1b800000 0x02500000>;
+        };
+
+        partition@1dd00000 {
+            label = "efs";
+            reg = <0x1dd00000 0x01800000>;
+			read-only;
+        };
+
+        partition@1f500000 {
+            label = "reservoir";
+            reg = <0x1f500000 0x00ac0000>;
+			read-only; // for now
+        };
+
+        partition@1ffc0000 {
+            label = "dgs";
+            reg = <0x1ffc0000 0x00040000>;
+			read-only;
+        };
+    };
 };

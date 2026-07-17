@@ -372,7 +372,6 @@ static const struct samsung_mux_clock early_mux_clks[] __initconst = {
 
 /* Common clock muxes. */
 static const struct samsung_mux_clock mux_clks[] __initconst = {
-	MUX(MOUT_FLASH, "mout_flash", mout_flash_p, CLK_SRC0, 28, 1),
 	MUX(MOUT_PSYS, "mout_psys", mout_group4_p, CLK_SRC0, 24, 1),
 	MUX(MOUT_DSYS, "mout_dsys", mout_group4_p, CLK_SRC0, 20, 1),
 	MUX(MOUT_MSYS, "mout_msys", mout_group3_p, CLK_SRC0, 16, 1),
@@ -385,6 +384,7 @@ static const struct samsung_mux_clock mux_clks[] __initconst = {
 
 /* S5PV210-specific clock muxes. */
 static const struct samsung_mux_clock s5pv210_mux_clks[] __initconst = {
+	MUX(MOUT_FLASH, "mout_flash", mout_flash_p, CLK_SRC0, 28, 1),
 	MUX(MOUT_VPLL, "mout_vpll", mout_vpll_p, CLK_SRC0, 12, 1),
 
 	MUX(MOUT_VPLLSRC, "mout_vpllsrc", mout_vpllsrc_p, CLK_SRC1, 28, 1),
@@ -431,6 +431,7 @@ static const struct samsung_mux_clock s5pv210_mux_clks[] __initconst = {
 /* S5P6442-specific clock muxes. */
 static const struct samsung_mux_clock s5p6442_mux_clks[] __initconst = {
 	MUX(MOUT_VPLL, "mout_vpll", mout_vpll_6442_p, CLK_SRC0, 12, 1),
+	MUX(MOUT_FLASH, "mout_flash", mout_flash_p, CLK_SRC0, 24, 4),
 
 	MUX(MOUT_FIMD, "mout_fimd", mout_group2_6442_p, CLK_SRC1, 20, 4),
 	MUX(MOUT_CAM1, "mout_cam1", mout_group2_6442_p, CLK_SRC1, 16, 4),
@@ -498,7 +499,6 @@ static const struct samsung_div_clock div_clks[] __initconst = {
 	DIV(DOUT_PWM, "dout_pwm", "mout_pwm", CLK_DIV5, 12, 4),
 	DIV(DOUT_SPI0, "dout_spi0", "mout_spi0", CLK_DIV5, 0, 4),
 
-	DIV(DOUT_FLASH, "dout_flash", "mout_flash", CLK_DIV6, 12, 3),
 	DIV(DOUT_AUDIO1, "dout_audio1", "mout_audio1", CLK_DIV6, 4, 4),
 	DIV(DOUT_AUDIO0, "dout_audio0", "mout_audio0", CLK_DIV6, 0, 4),
 
@@ -528,6 +528,7 @@ static const struct samsung_div_clock s5pv210_div_clks[] __initconst = {
 	DIV(DOUT_PWI, "dout_pwi", "mout_pwi", CLK_DIV6, 24, 4),
 	DIV(DOUT_HPM, "dout_hpm", "dout_copy", CLK_DIV6, 20, 3),
 	DIV(DOUT_COPY, "dout_copy", "mout_hpm", CLK_DIV6, 16, 3),
+	DIV(DOUT_FLASH, "dout_flash", "mout_flash", CLK_DIV6, 12, 3),
 	DIV(DOUT_AUDIO2, "dout_audio2", "mout_audio2", CLK_DIV6, 8, 4),
 
 	DIV(DOUT_DPM, "dout_dpm", "dout_pclkp", CLK_DIV7, 8, 7),
@@ -536,8 +537,9 @@ static const struct samsung_div_clock s5pv210_div_clks[] __initconst = {
 
 /* S5P6442-specific clock dividers. */
 static const struct samsung_div_clock s5p6442_div_clks[] __initconst = {
-	DIV(DOUT_HCLKP, "dout_hclkp", "mout_d1sync", CLK_DIV0, 24, 4),
-	DIV(DOUT_HCLKD, "dout_hclkd", "mout_d0sync", CLK_DIV0, 16, 4),
+	DIV(DOUT_HCLKP, "dout_hclkp", "mout_d1sync", CLK_DIV0, 0, 4), // 24, 4),
+	DIV(DOUT_HCLKD, "dout_hclkd", "mout_d0sync", CLK_DIV0, 4, 4), // 4, 4),
+	DIV(DOUT_FLASH, "dout_flash", "mout_flash", CLK_DIV0, 24, 3), // CLK_DIV1, 24, 3),
 
 	DIV(DOUT_MIXER, "dout_mixer", "mout_vpll", CLK_DIV1, 0, 4),
 };
@@ -552,7 +554,6 @@ static const struct samsung_gate_clock gate_clks[] __initconst = {
 	GATE(CLK_MDMA, "mdma", "dout_hclkd", CLK_GATE_IP0, 2, 0, 0),
 
 	GATE(CLK_SROMC, "sromc", "dout_hclkp", CLK_GATE_IP1, 26, 0, 0),
-	GATE(CLK_NANDXL, "nandxl", "dout_hclkp", CLK_GATE_IP1, 24, 0, 0),
 	GATE(CLK_USB_OTG, "usb_otg", "dout_hclkp", CLK_GATE_IP1, 16, 0, 0),
 	GATE(CLK_TVENC, "tvenc", "dout_hclkd", CLK_GATE_IP1, 10, 0, 0),
 	GATE(CLK_MIXER, "mixer", "dout_hclkd", CLK_GATE_IP1, 9, 0, 0),
@@ -633,6 +634,7 @@ static const struct samsung_gate_clock s5pv210_gate_clks[] __initconst = {
 
 	GATE(CLK_NFCON, "nfcon", "dout_hclkp", CLK_GATE_IP1, 28, 0, 0),
 	GATE(CLK_CFCON, "cfcon", "dout_hclkp", CLK_GATE_IP1, 25, 0, 0),
+	GATE(CLK_NANDXL, "nandxl", "dout_hclkp", CLK_GATE_IP1, 24, 0, 0),
 	GATE(CLK_USB_HOST, "usb_host", "dout_hclkp", CLK_GATE_IP1, 17, 0, 0),
 	GATE(CLK_HDMI, "hdmi", "dout_hclkd", CLK_GATE_IP1, 11, 0, 0),
 	GATE(CLK_DSIM, "dsim", "dout_pclkd", CLK_GATE_IP1, 2, 0, 0),
@@ -696,6 +698,9 @@ static const struct samsung_gate_clock s5p6442_gate_clks[] __initconst = {
 	GATE(CLK_ETM, "etm", "dout_hclkd", CLK_GATE_IP1, 30, 0, 0),
 
 	GATE(CLK_I2C1, "i2c1", "dout_pclkp", CLK_GATE_IP3, 8, 0, 0),
+//    GATE(CLK_NANDXL, "nandxl", "mout_vpll", CLK_GATE_IP0, 12, 0, 0), 
+    GATE(CLK_NANDXL, "nandxl", "dout_hclkp", CLK_GATE_IP1, 24, 0, 0), 
+    GATE(CLK_ONENAND, "onenand", "dout_flash", CLK_GATE_IP1, 4, 0, 0),
 
 	GATE(SCLK_DAC, "sclk_dac", "mout_vpll", CLK_SRC_MASK0, 2,
 			CLK_SET_RATE_PARENT, 0),

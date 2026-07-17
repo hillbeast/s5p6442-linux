@@ -563,8 +563,10 @@ static int onenand_wait(struct mtd_info *mtd, int state)
 	while (time_before(jiffies, timeout)) {
 		interrupt = this->read_word(this->base + ONENAND_REG_INTERRUPT);
 
-		if (interrupt & flags)
+		if (interrupt & flags) {
+			pr_info("%s: interrupted (this is good)\n", __func__);
 			break;
+		}
 
 		if (state != FL_READING && state != FL_PREPARING_ERASE)
 			cond_resched();
@@ -1525,6 +1527,82 @@ static int onenand_bbt_wait(struct mtd_info *mtd, int state)
 	}
 
 	return 0;
+}
+
+/**
+ * s5p_onenand_bbt_read_oob - [MTD Interface] OneNAND read out-of-band for bbt scan
+ * @mtd:		MTD device structure
+ * @from:		offset to read from
+ * @ops:		oob operation description structure
+ *
+ * OneNAND read out-of-band data from the spare area for bbt scan
+ */
+int s5p_onenand_bbt_read_oob(struct mtd_info *mtd, loff_t from, 
+			    struct mtd_oob_ops *ops)
+{
+	struct onenand_chip *this = mtd->priv;
+	int read = 0, thislen, column;
+	int ret = 0, readcmd;
+	size_t len = ops->ooblen;
+	u_char *buf = ops->oobbuf;
+
+	pr_info("%s: from = 0x%08x, len = %zi\n", __func__, (unsigned int)from,
+			len);
+
+	/* Initialize return value */
+	ops->oobretlen = 0;
+
+	/* Do not allow reads past end of device */
+	if (unlikely((from + len) > mtd->size)) {
+		printk(KERN_ERR "%s: Attempt read beyond end of device\n",
+			__func__);
+		return ONENAND_BBT_READ_FATAL_ERROR;
+	}
+
+	/* Grab the lock and see if the device is available */
+	onenand_get_device(mtd, FL_READING);
+
+	column = from & (mtd->oobsize - 1);
+
+	readcmd = ONENAND_IS_4KB_PAGE(this) ? ONENAND_CMD_READ : ONENAND_CMD_READOOB;
+
+	while (read < len) {
+		cond_resched();
+
+		thislen = mtd->oobsize - column;
+		thislen = min_t(int, thislen, len);
+
+		this->command(mtd, readcmd, from, mtd->oobsize);
+
+		onenand_update_bufferram(mtd, from, 0);
+
+		ret = this->bbt_wait(mtd, FL_READING);
+		if (unlikely(ret))
+			ret = onenand_recover_lsb(mtd, from, ret);
+
+		if (ret)
+			break;
+
+		this->read_bufferram(mtd, ONENAND_SPARERAM, buf, column, thislen);
+		read += thislen;
+		if (read == len)
+			break;
+
+		buf += thislen;
+
+		/* Read more? */
+		if (read < len) {
+			/* Update Page size */
+			from += this->writesize;
+			column = 0;
+		}
+	}
+
+	/* Deselect and wake up anyone waiting on the device */
+	onenand_release_device(mtd);
+
+	ops->oobretlen = read;
+	return ret;
 }
 
 /**
@@ -3678,16 +3756,12 @@ static int onenand_chip_probe(struct mtd_info *mtd)
 	/* Restore system configuration 1 */
 	this->write_word(syscfg, this->base + ONENAND_REG_SYS_CFG1);
 
-	/* Check manufacturer ID */
-	if (onenand_check_maf(bram_maf_id))
-		return -ENXIO;
-
 	/* Read manufacturer and device IDs from Register */
 	maf_id = this->read_word(this->base + ONENAND_REG_MANUFACTURER_ID);
 	dev_id = this->read_word(this->base + ONENAND_REG_DEVICE_ID);
 
-	/* Check OneNAND device */
-	if (maf_id != bram_maf_id || dev_id != bram_dev_id)
+	/* Check manufacturer ID */
+	if (onenand_check_maf(bram_maf_id))
 		return -ENXIO;
 
 	return 0;

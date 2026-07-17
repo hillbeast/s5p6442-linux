@@ -17,7 +17,7 @@
  * nodes can be added to this file.
  */
 
-#include <dt-bindings/clock/s5p6442.h>
+#include <dt-bindings/clock/s5pv210.h>
 #include <dt-bindings/clock/s5p6442-audss.h>
 
 / {
@@ -64,6 +64,12 @@
 		#clock-cells = <0>;
 	};
 
+	pd_mem: power-domain-mem {
+		compatible = "samsung,s5pv210-pd"; /* Tells genpd to tap into the syscon provider */
+		power-domains = <&pmu_syscon 0>;   /* Domain Index 0 represents the first internal grid */
+		#power-domain-cells = <0>;
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <1>;
@@ -72,16 +78,15 @@
 
 		onenand: onenand@b0600000 { // FIXED
 			compatible = "samsung,s5p6442-onenand";
-			reg = <0xb0000000 0x20000>, // FIXED
-				<0xb0600000 0x2000>, // ASSUMED
-				<0xb0040000 0x20000>; // ASSUMED
+			reg = <0xb0000000 0x20000>,
+					<0xb0600000 0x2000>;
 			interrupt-parent = <&vic1>; // FIXED
 			interrupts = <31>; // FIXED
-			clocks = <&clocks CLK_NANDXL>, <&clocks DOUT_FLASH>;
-			clock-names = "bus", "onenand";
+			clocks = <&clocks CLK_NANDXL>, <&clocks CLK_ONENAND>;
+			clock-names = "nandxl", "onenand";
 			#address-cells = <1>;
 			#size-cells = <1>;
-			status = "disabled"; // FIXME: Disabled
+			status = "disabled";
 		};
 
 		chipid@e0000000 {
@@ -95,11 +100,13 @@
 			clock-names = "xxti", "xusbxti";
 			clocks = <&xxti>, <&xusbxti>;
 			#clock-cells = <1>;
+			protected-clocks = <CLK_NANDXL>, <DOUT_FLASH>;
 		};
 
 		pmu_syscon: syscon@e0108000 { // FIXED
 			compatible = "samsung-s5pv210-pmu", "syscon";
 			reg = <0xe0108000 0x8000>; // FIXED
+			#power-domain-cells = <1>;
 		};
 
 		pinctrl0: pinctrl@e0200000 { // FIXED

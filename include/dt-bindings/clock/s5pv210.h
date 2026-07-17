@@ -221,6 +221,7 @@
 #define DOUT_MIXER		197
 #define CLK_ETB			198
 #define CLK_ETM			199
+#define CLK_ONENAND     206
 
 /* CLKOUT */
 #define FOUT_APLL_CLKOUT	200
@@ -231,6 +232,6 @@
 #define MOUT_CLKOUT		205
 
 /* Total number of clocks. */
-#define NR_CLKS			206
+#define NR_CLKS			207
 
 #endif /* _DT_BINDINGS_CLOCK_S5PV210_H */
