@@ -229,16 +229,15 @@ static const struct samsung_retention_data s5p6442_retention_data __initconst = 
 
 /* pin banks of s5p6442 pin-controller */
 static const struct samsung_pin_bank_data s5p6442_pin_bank[] __initconst = {
-/* 1. General Purpose Banks with Standard Ext-Interrupt Handling */
 	S5P6442_BANK_EINTG(8, 0x000, 0,  "gpa0"),
-	S5P6442_BANK_EINTG(2, 0x020, 0,  "gpa1"), /* Shares EINT Group 0 */
-	S5P6442_BANK_EINTG(4, 0x040, 4,  "gpb"),  /* EINT Group 1 */
-	S5P6442_BANK_EINTG(5, 0x060, 8,  "gpc0"), /* EINT Group 2 */
-	S5P6442_BANK_EINTG(5, 0x080, 8,  "gpc1"), /* Shares EINT Group 2 */
-	S5P6442_BANK_EINTG(2, 0x0a0, 12, "gpd0"), /* EINT Group 3 */
-	S5P6442_BANK_EINTG(6, 0x0c0, 12, "gpd1"), /* Shares EINT Group 3 */
-	S5P6442_BANK_EINTG(8, 0x0e0, 16, "gpe0"), /* EINT Group 4 */
-	S5P6442_BANK_EINTG(5, 0x100, 16, "gpe1"), /* Shares EINT Group 4 */
+	S5P6442_BANK_EINTG(2, 0x020, 0,  "gpa1"),
+	S5P6442_BANK_EINTG(4, 0x040, 4,  "gpb"), 
+	S5P6442_BANK_EINTG(5, 0x060, 8,  "gpc0"),
+	S5P6442_BANK_EINTG(5, 0x080, 8,  "gpc1"),
+	S5P6442_BANK_EINTG(2, 0x0a0, 12, "gpd0"),
+	S5P6442_BANK_EINTG(6, 0x0c0, 12, "gpd1"),
+	S5P6442_BANK_EINTG(8, 0x0e0, 16, "gpe0"),
+	S5P6442_BANK_EINTG(5, 0x100, 16, "gpe1"),
 	S5P6442_BANK_EINTG(8, 0x120, 20, "gpf0"),
 	S5P6442_BANK_EINTG(8, 0x140, 24, "gpf1"),
 	S5P6442_BANK_EINTG(8, 0x160, 28, "gpf2"),
@@ -252,16 +251,14 @@ static const struct samsung_pin_bank_data s5p6442_pin_bank[] __initconst = {
 	S5P6442_BANK_EINTG(8, 0x260, 60, "gpj3"),
 	S5P6442_BANK_EINTG(5, 0x280, 64, "gpj4"),
 
-	/* 2. System and Memory Port Banks (Strict 0x40 Pitch - No Interrupts) */
-	S5P6442_BANK_NONE(8,  0x2a0,     "mp01"),
-	S5P6442_BANK_NONE(4,  0x2e0,     "mp02"), /* Corrected base from 0x300 */
-	S5P6442_BANK_NONE(5,  0x320,     "mp03"),
-	S5P6442_BANK_NONE(8,  0x360,     "mp04"), /* Corrected base from 0x340 */
-	S5P6442_BANK_NONE(8,  0x3a0,     "mp05"), /* Corrected base from 0x360 */
-	S5P6442_BANK_NONE(8,  0x3e0,     "mp06"), /* Corrected base from 0x380 */
-	S5P6442_BANK_NONE(8,  0x420,     "mp07"), /* Corrected base from 0x3a0 */
+	S5P6442_BANK_NONE(8,  0x2a0,     "mp01"), // 0x2a0
+	S5P6442_BANK_NONE(4,  0x2c0,     "mp02"), // 0x2c0
+	S5P6442_BANK_NONE(5,  0x2e0,     "mp03"), // 0x2e0
+	S5P6442_BANK_NONE(8,  0x300,     "mp04"), // 0x300
+	S5P6442_BANK_NONE(8,  0x320,     "mp05"), // 0x320
+	S5P6442_BANK_NONE(8,  0x340,     "mp06"), // 0x340
+	S5P6442_BANK_NONE(8,  0x360,     "mp07"), // 0x360
 
-	/* 3. Wakeup Domain Banks (Explicit Separate Register Area) */
 	S5P6442_BANK_WKUP(8,  0xc00, 0,  "gph0"),
 	S5P6442_BANK_WKUP(8,  0xc20, 4,  "gph1"),
 	S5P6442_BANK_WKUP(8,  0xc40, 8,  "gph2"),
