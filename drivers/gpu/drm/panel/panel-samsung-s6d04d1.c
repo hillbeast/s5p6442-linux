@@ -8,6 +8,7 @@
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
 
+#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/init.h>
@@ -18,30 +19,42 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 
+#include <linux/debugfs.h>
+
 #include <video/mipi_display.h>
 
-#define S6D04D1_RDDIDIF		0x04	/* Read Display ID */
-#define S6D04D1_WRDISBV		0x51	/* Write Manual Brightness */
-#define S6D04D1_READID1		0xDA	/* Read panel ID 1 */
-#define S6D04D1_READID2		0xDB	/* Read panel ID 2 */
-#define S6D04D1_READID3		0xDC	/* Read panel ID 3 */
-#define S6D04D1_PASSWD_L2	0xF0	/* Password Command for Level 2 Control */
-#define S6D04D1_DISPCTL		0xF2	/* Display Control */
-#define S6D04D1_MANPWR		0xF3	/* Manual Control */
-#define S6D04D1_PWRCTL1		0xF4	/* Power Control */
-#define S6D04D1_SRCCTL		0xF6	/* Source Control */
-#define S6D04D1_PANELCTL	0xF7	/* Panel Control*/
-
-#define MAX_BRIGHTNESS_LEVEL 0xFF
-#define LOW_BRIGHTNESS_LEVEL 0x1E
-
-#define MAX_BACKLIGHT_VALUE_SMD 0x9B
-#define LOW_BACKLIGHT_VALUE_SMD 0x1F
-#define DIM_BACKLIGHT_VALUE_SMD 0x12
-
-#define MAX_BACKLIGHT_VALUE_SONY 0x9B //0xB4
-#define LOW_BACKLIGHT_VALUE_SONY 0x1F
-#define DIM_BACKLIGHT_VALUE_SONY 0x12
+#define S6D04D1_RDDIDIF			0x04	/* Read Display ID */
+#define S6D04D1_SLPOUT			0x11
+#define S6D04D1_DISPON			0x29
+#define S6D04D1_CASET			0x2A
+#define S6D04D1_PASET			0x2B
+#define S6D04D1_RAMWR			0x2C
+#define S6D04D1_MADCTL			0x36
+#define S6D04D1_COLMOD			0x3A
+#define S6D04D1_WRDISBV			0x51	/* Write Manual Brightness */
+#define S6D04D1_WRCTRLD			0x53
+#define S6D04D1_WRCABC			0x55
+#define S6D04D1_READID1			0xDA	/* Read panel ID 1 */
+#define S6D04D1_READID2			0xDB	/* Read panel ID 2 */
+#define S6D04D1_READID3			0xDC	/* Read panel ID 3 */
+#define S6D04D1_WRCABCMB		0x5E
+#define S6D04D1_MIECTL1			0xCA
+#define S6D04D1_SRBCMODECCTL	0xCB
+#define S6D04D1_MIECTL2			0xCC
+#define S6D04D1_MIECTL3			0xCD
+#define S6D04D1_PASSWD_L2		0xF0	/* Password Command for Level 2 Control */
+#define S6D04D1_DISPCTL			0xF2	/* Display Control */
+#define S6D04D1_MANPWR			0xF3	/* Manual Control */
+#define S6D04D1_PWRCTL1			0xF4	/* Power Control */
+#define S6D04D1_SRCCTL			0xF5	/* Source Control */
+#define S6D04D1_IFCTL			0xF6
+#define S6D04D1_PANELCTL		0xF7	/* Panel Control*/
+#define S6D04D1_RNGAMCTL		0xF8
+#define S6D04D1_GPGAMCTL		0xF9
+#define S6D04D1_GNGAMCTL		0xFA
+#define S6D04D1_BPGAMCTL		0xFB
+#define S6D04D1_BNGAMCTL		0xFC
+#define S6D04D1_GATECTL			0xFD
 
 static const u8 s6d04d1_dbi_read_commands[] = {
 	S6D04D1_RDDIDIF,
@@ -57,6 +70,8 @@ struct s6d04d1 {
 	struct drm_panel panel;
 	struct gpio_desc *reset;
 	struct regulator_bulk_data regulators[2];
+	struct backlight_device *bl_dev;
+	bool prepared;
 };
 
 static const struct drm_display_mode s6d04d1_video_mode = {
@@ -86,114 +101,108 @@ struct setting_table {
 	s32 wait;
 };
 
-static struct setting_table backlight_setting_table[] = {
-	{ S6D04D1_WRDISBV,  1, { 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },   0 }
+struct backlight_properties backlight_props = {
+	.type = BACKLIGHT_RAW,
+	.brightness = 255,
+	.max_brightness = 255,
 };
 
+#define S6D04D1_MAX_BRIGHTNESS_LEVEL   0xFF
+#define S6D04D1_LOW_BRIGHTNESS_LEVEL   0x1E
 
-static int s6d04d1_write_setting_table(struct s6d04d1 *ctx, 
-				       struct setting_table *table, 
-				       size_t count)
-{
-	struct mipi_dbi *dbi = &ctx->dbi;
-	size_t i;
-	int ret;
+#define S6D04D1_MAX_BACKLIGHT_VALUE_SMD 0x9B
+#define S6D04D1_LOW_BACKLIGHT_VALUE_SMD 0x1F
+#define S6D04D1_DIM_BACKLIGHT_VALUE_SMD 0x12
 
-	for (i = 0; i < count; i++) {
-		/* Force execution through standard MIPI DBI buffers */
-		ret = mipi_dbi_command_buf(dbi, table[i].command, 
-					   table[i].parameter, 
-					   table[i].parameters);
-		if (ret) {
-			dev_err(ctx->dev, "Failed to write cmd 0x%02x: %d\n", 
-				table[i].command, ret);
-			return ret;
-		}
-
-		/* Apply the specific hardware pause instruction if specified */
-		if (table[i].wait > 0)
-			msleep(table[i].wait);
-	}
-
-	return 0;
-}
-
-static int s6d04d1_get_tune(int level)
+static u8 s6d04d1_get_tune(int level)
 {
 	int tune_value;
 
-	// SMD LCD
-	if(level > MAX_BRIGHTNESS_LEVEL)
-		level = MAX_BRIGHTNESS_LEVEL;
+	if (level > S6D04D1_MAX_BRIGHTNESS_LEVEL)
+		level = S6D04D1_MAX_BRIGHTNESS_LEVEL;
 
-	if(level >= LOW_BRIGHTNESS_LEVEL)
-		tune_value = (level - LOW_BRIGHTNESS_LEVEL) * (MAX_BACKLIGHT_VALUE_SMD-LOW_BACKLIGHT_VALUE_SMD) / (MAX_BRIGHTNESS_LEVEL-LOW_BRIGHTNESS_LEVEL) + LOW_BACKLIGHT_VALUE_SMD;
-	else if(level > 0)
-		tune_value = DIM_BACKLIGHT_VALUE_SMD;
+	if (level >= S6D04D1_LOW_BRIGHTNESS_LEVEL)
+		tune_value = (level - S6D04D1_LOW_BRIGHTNESS_LEVEL) *
+			     (S6D04D1_MAX_BACKLIGHT_VALUE_SMD - S6D04D1_LOW_BACKLIGHT_VALUE_SMD) /
+			     (S6D04D1_MAX_BRIGHTNESS_LEVEL - S6D04D1_LOW_BRIGHTNESS_LEVEL) +
+			     S6D04D1_LOW_BACKLIGHT_VALUE_SMD;
+	else if (level > 0)
+		tune_value = S6D04D1_DIM_BACKLIGHT_VALUE_SMD;
 	else
-		tune_value = level;
-	
-	if(tune_value > MAX_BACKLIGHT_VALUE_SMD)
-		tune_value = MAX_BACKLIGHT_VALUE_SMD;			// led_val must be less than or equal to MAX_BACKLIGHT_VALUE
+		tune_value = level; /* i.e. 0 */
 
-	if(level && !tune_value)
+	if (tune_value > S6D04D1_MAX_BACKLIGHT_VALUE_SMD)
+		tune_value = S6D04D1_MAX_BACKLIGHT_VALUE_SMD;
+
+	if (level && !tune_value)
 		tune_value = 1;
 
-	return tune_value;
+	return (u8)tune_value;
 }
 
-static int s6d04d1_set_brightness(struct s6d04d1 *ctx, int level)
+static int s6d04d1_set_backlight(struct backlight_device *bd)
 {
-	unsigned int led_val;
+	struct s6d04d1 *ctx = bl_get_data(bd);
+	struct mipi_dbi *dbi = &ctx->dbi;
+	int brightness = backlight_get_brightness(bd);
 
-	led_val = s6d04d1_get_tune(level);
+	if (!ctx->prepared)
+		return 0; /* nothing to do until the panel is powered/init'd */
 
-	// backlight_setting_table.parameter[0] = led_val;
-
-	printk("%s brightness:0x%x\n", __func__, backlight_setting_table[0].parameter[0]);
-	s6d04d1_write_setting_table(ctx, backlight_setting_table, ARRAY_SIZE(backlight_setting_table));
+	mipi_dbi_command(dbi, S6D04D1_WRDISBV, s6d04d1_get_tune(brightness)); /* WRDISBV */
 
 	return 0;
+}
+
+static const struct backlight_ops s6d04d1_backlight_ops = {
+	.update_status = s6d04d1_set_backlight,
+};
+
+static int s6d04d1_read_ldi_register(struct mipi_dbi *dbi, u8 cmd,
+				      u8 *data, size_t len)
+{
+	struct spi_device *spi = dbi->spi;
+	u32 speed_hz = min_t(u32, 200000, spi->max_speed_hz / 2);
+	u16 *cmdbuf = dbi->tx_buf9;
+	struct spi_transfer tr[2] = {
+		{
+			.speed_hz = speed_hz,
+			.bits_per_word = 10,
+			.tx_buf = cmdbuf,
+			.len = 2,
+		}, {
+			.speed_hz = speed_hz,
+			.bits_per_word = 8,
+			.rx_buf = data,
+			.len = len,
+		},
+	};
+	struct spi_message m;
+
+	if (!spi_is_bpw_supported(spi, 10))
+		return -EOPNOTSUPP;
+
+	cmdbuf[0] = (u16)cmd << 1;
+
+	spi_message_init_with_transfers(&m, tr, ARRAY_SIZE(tr));
+	return spi_sync(spi, &m);
 }
 
 static void s6d04d1_read_mtp_id(struct s6d04d1 *ctx)
 {
 	struct mipi_dbi *dbi = &ctx->dbi;
-	struct spi_device *spi = dbi->spi;
-	struct spi_message msg;
-	struct spi_transfer xfers[2];
-	u8 cmd = 0x04;
-	u8 id_buf[4] = {0};
+	u8 cmd = S6D04D1_RDDIDIF;
+	u8 id_buf[3] = {0};
 	int ret;
 
-	if (!spi)
-		return;
-
-	spi_message_init(&msg);
-	memset(xfers, 0, sizeof(xfers));
-
-	xfers[0].tx_buf = &cmd;
-	xfers[0].len = 1;
-	
-	xfers[0].delay.value = 10;
-	xfers[0].delay.unit = SPI_DELAY_UNIT_USECS;
-	spi_message_add_tail(&xfers[0], &msg);
-
-	xfers[1].rx_buf = id_buf;
-	xfers[1].len = 4;
-	spi_message_add_tail(&xfers[1], &msg);
-
-	ret = spi_sync(spi, &msg);
+	ret = s6d04d1_read_ldi_register(dbi, cmd, id_buf, 3);
 	if (ret) {
-		dev_err(ctx->dev, "SPI sync multi-phase read failed: %d\n", ret);
+		dev_err(ctx->dev, "RDDIDIF read failed: %d\n", ret);
 		return;
 	}
 
-	pr_info("%s: NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE\n", __func__);
-	pr_info("%s:   SPI DOES NOT APPEAR TO BE BIDIRECTIONAL AND IS RETURNING 0x00\n", __func__);
-	pr_info("%s: NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE NOTE\n", __func__);
-	dev_info(ctx->dev, "RDDIDIF: %02x %02x %02x %02x\n",
-		 id_buf[0], id_buf[1], id_buf[2], id_buf[3]);
+	dev_info(ctx->dev, "RDDIDIF: %02x %02x %02x\n",
+		 id_buf[0], id_buf[1], id_buf[2]);
 
 }
 
@@ -209,51 +218,63 @@ static int s6d04d1_power_on(struct s6d04d1 *ctx)
 		dev_err(ctx->dev, "failed to enable regulators: %d\n", ret);
 		return ret;
 	}
-
 	msleep(20);
 
 	/* Reset Display */
+	gpiod_set_value_cansleep(ctx->reset, 0);
+	msleep(10);
 	gpiod_set_value_cansleep(ctx->reset, 1);
-	usleep_range(1000, 5000);
+	msleep(10);
 	gpiod_set_value_cansleep(ctx->reset, 0);
 	msleep(20);
 
+	/* Dummy command after reset to prime controller */
+	u8 dummy[3];
+	s6d04d1_read_ldi_register(dbi, S6D04D1_RDDIDIF, dummy, 3);
+	
+	s6d04d1_read_mtp_id(ctx);
+
 	/* Magic startup code from 2.6.32 Kernel Driver */
-	mipi_dbi_command(dbi, 0xF3, 0x80, 0x00, 0x00, 0x0B, 0x33, 0x7F, 0x7F); 													// POWCTL
-	mipi_dbi_command(dbi, 0xF4, 0x6E, 0x6E, 0x7F, 0x7F, 0x33); 																// VCMCTL
-	mipi_dbi_command(dbi, 0xF5, 0x12, 0x00, 0x03, 0xF0, 0x70); 																// SRCCTL
-	mipi_dbi_command(dbi, 0x11);  																							// SLPOUT
+	mipi_dbi_command(dbi, S6D04D1_MANPWR, 0x80, 0x00, 0x00, 0x0B, 0x33, 0x7F, 0x7F);
+	mipi_dbi_command(dbi, S6D04D1_PWRCTL1, 0x6E, 0x6E, 0x7F, 0x7F, 0x33);
+	mipi_dbi_command(dbi, S6D04D1_SRCCTL, 0x12, 0x00, 0x03, 0xF0, 0x70);
+	mipi_dbi_command(dbi, S6D04D1_SLPOUT);
 	msleep(120);
 
-	mipi_dbi_command(dbi, 0x36, 0x88); 	 																					// MADCTL
-	mipi_dbi_command(dbi, 0x3A, 0x77); 	 																					// COLMOD
+	mipi_dbi_command(dbi, S6D04D1_MADCTL, 0x98);
+	mipi_dbi_command(dbi, S6D04D1_COLMOD, 0x77);
 	msleep(30);
 
-	mipi_dbi_command(dbi, 0xF2, 0x14, 0x14, 0x03, 0x03, 0x04, 0x03, 0x04, 0x10, 0x04, 0x14, 0x14); 	 						// DISCTL
-	mipi_dbi_command(dbi, 0xF6, 0x00, 0x81, 0x30, 0x10); 	 																// IFCTL
-	mipi_dbi_command(dbi, 0xFD, 0x22, 0x01); 	 																			// GATECTL
-	mipi_dbi_command(dbi, 0x51, 0x00);  //BRIGHTNESS	 																	// WRDISBV
-	mipi_dbi_command(dbi, 0x5E, 0x00); 	 																					// WRCABCMB
-	mipi_dbi_command(dbi, 0xCA, 0x80, 0x80, 0x20); 	 																		// MIECTL1
-	mipi_dbi_command(dbi, 0xCB, 0x03); 	 																					// SRBCMODECCTL
-	mipi_dbi_command(dbi, 0xCC, 0x20, 0x01, 0x8F);  																		// MIECTL2
-	mipi_dbi_command(dbi, 0xCD, 0x7C, 0x01); 	 																			// MIECTL3
-	mipi_dbi_command(dbi, 0xF7, 0x00, 0x23, 0x15, 0x15, 0x1C, 0x1D, 0x1D, 0x21, 0x22, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21);	// RPGAMCTL 
-	mipi_dbi_command(dbi, 0xF8, 0x19, 0x00, 0x15, 0x15, 0x1C, 0x1D, 0x1D, 0x21, 0x22, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21); 	// RNGAMCTL 
-	mipi_dbi_command(dbi, 0xF9, 0x00, 0x23, 0x15, 0x15, 0x1C, 0x1C, 0x1B, 0x1F, 0x24, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21); 	// GPGAMCTL 
-	mipi_dbi_command(dbi, 0xFA, 0x19, 0x00, 0x15, 0x15, 0x1C, 0x1C, 0x1B, 0x1F, 0x24, 0x28, 0x2C, 0x2C, 0x2C, 0x22, 0x21); 	// GNGAMCTL 
-	mipi_dbi_command(dbi, 0xFB, 0x00, 0x23, 0x15, 0x15, 0x1A, 0x18, 0x15, 0x17, 0x2E, 0x37, 0x3F, 0x3F, 0x3F, 0x22, 0x21); 	// BPGAMCTL 
-	mipi_dbi_command(dbi, 0xFC, 0x19, 0x00, 0x15, 0x15, 0x1A, 0x18, 0x15, 0x17, 0x2E, 0x37, 0x3F, 0x3F, 0x3F, 0x22, 0x21); 	// BNGAMCTL 
-	mipi_dbi_command(dbi, 0x2A, 0x00, 0x00, 0x00, 0xEF);  	 																// CASET
-	mipi_dbi_command(dbi, 0x2B, 0x00, 0x00, 0x01, 0x8F);  	 																// PASET
-	mipi_dbi_command(dbi, 0x2C);  	 																						// RAMWR
-	mipi_dbi_command(dbi, 0x53, 0x2C);  	 																				// WRCTRLD
-	mipi_dbi_command(dbi, 0x55, 0x00); 	 	 																				// WRCABC
-	mipi_dbi_command(dbi, 0x29);  	 																						// DISPON
+	mipi_dbi_command(dbi, S6D04D1_DISPCTL, 0x14, 0x14, 0x03, 0x03, 0x04, 0x03, 0x04, 0x10, 0x04, 0x14, 0x14);
+	mipi_dbi_command(dbi, S6D04D1_IFCTL, 0x00, 0x81, 0x30, 0x10);
+	mipi_dbi_command(dbi, S6D04D1_GATECTL, 0x22, 0x01);
+	mipi_dbi_command(dbi, S6D04D1_WRDISBV, 0x00);
+	mipi_dbi_command(dbi, S6D04D1_WRCABCMB, 0x00);
+	mipi_dbi_command(dbi, S6D04D1_MIECTL1, 0x80, 0x80, 0x20);
+	mipi_dbi_command(dbi, S6D04D1_SRBCMODECCTL, 0x03);
+	mipi_dbi_command(dbi, S6D04D1_MIECTL2, 0x20, 0x01, 0x8F);
+	mipi_dbi_command(dbi, S6D04D1_MIECTL3, 0x7C, 0x01);
+	mipi_dbi_command(dbi, S6D04D1_PANELCTL, 0x00, 0x23, 0x15, 0x15, 0x1C, 0x19, 0x18, 0x1E, 0x24, 0x25, 0x25, 0x20, 0x10, 0x22, 0x21);
+	mipi_dbi_command(dbi, S6D04D1_RNGAMCTL, 0x19, 0x00, 0x15, 0x15, 0x1C, 0x1F, 0x1E, 0x24, 0x1E, 0x1F, 0x25, 0x20, 0x10, 0x22, 0x21);
+	mipi_dbi_command(dbi, S6D04D1_GPGAMCTL, 0x06, 0x23, 0x14, 0x14, 0x1D, 0x1A, 0x19, 0x1F, 0x24, 0x26, 0x30, 0x1E, 0x1E, 0x22, 0x21);
+	mipi_dbi_command(dbi, S6D04D1_GNGAMCTL, 0x19, 0x06, 0x14, 0x14, 0x1D, 0x20, 0x1F, 0x25, 0x1E, 0x20, 0x30, 0x1E, 0x1E, 0x22, 0x21);
+	mipi_dbi_command(dbi, S6D04D1_BPGAMCTL, 0x2C, 0x23, 0x20, 0x20, 0x23, 0x2F, 0x30, 0x39, 0x09, 0x09, 0x18, 0x13, 0x13, 0x22, 0x21);
+	mipi_dbi_command(dbi, S6D04D1_BNGAMCTL, 0x19, 0x2C, 0x20, 0x20, 0x23, 0x35, 0x36, 0x3F, 0x03, 0x03, 0x18, 0x13, 0x13, 0x22, 0x21);
+	mipi_dbi_command(dbi, S6D04D1_CASET, 0x00, 0x00, 0x00, 0xEF);
+	mipi_dbi_command(dbi, S6D04D1_PASET, 0x00, 0x00, 0x01, 0x8F);
+	mipi_dbi_command(dbi, S6D04D1_RAMWR);
+	mipi_dbi_command(dbi, S6D04D1_WRCTRLD, 0x2C);
+	mipi_dbi_command(dbi, S6D04D1_WRCABC, 0x00);
+	mipi_dbi_command(dbi, S6D04D1_DISPON);
 	msleep(120);
 
 	/* lock the level 2 control */
 	mipi_dbi_command(dbi, S6D04D1_PASSWD_L2, 0xA5, 0xA5);
+
+	ctx->prepared = true;
+
+	if (ctx->bl_dev)
+		backlight_update_status(ctx->bl_dev);
 
 	return 0;
 }
@@ -262,6 +283,8 @@ static int s6d04d1_power_off(struct s6d04d1 *ctx)
 {
 	/* Go into RESET and disable regulators */
 	gpiod_set_value_cansleep(ctx->reset, 1);
+	ctx->prepared = false;
+
 	return regulator_bulk_disable(ARRAY_SIZE(ctx->regulators),
 				      ctx->regulators);
 }
@@ -299,8 +322,6 @@ static int s6d04d1_enable(struct drm_panel *panel)
 
 	mipi_dbi_command(dbi, MIPI_DCS_SET_DISPLAY_ON);
 	msleep(20);
-
-	s6d04d1_read_mtp_id(ctx);
 
 	return 0;
 }
@@ -342,6 +363,36 @@ static const struct drm_panel_funcs s6d04d1_drm_funcs = {
 	.get_modes = s6d04d1_get_modes,
 };
 
+static ssize_t s6d04d1_debug_power_on(struct file *f, const char __user *buf,
+				       size_t count, loff_t *ppos)
+{
+	struct s6d04d1 *ctx = file_inode(f)->i_private;
+
+	s6d04d1_power_on(ctx);
+	return count;
+}
+
+static const struct file_operations s6d04d1_debug_power_on_fops = {
+	.write = s6d04d1_debug_power_on,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
+static ssize_t s6d04d1_debug_read_mtp(struct file *f, const char __user *buf,
+				       size_t count, loff_t *ppos)
+{
+	struct s6d04d1 *ctx = file_inode(f)->i_private;
+
+	s6d04d1_read_mtp_id(ctx);
+	return count;
+}
+
+static const struct file_operations s6d04d1_debug_read_mtp_fops = {
+	.write = s6d04d1_debug_read_mtp,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
 static int s6d04d1_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
@@ -362,33 +413,40 @@ static int s6d04d1_probe(struct spi_device *spi)
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to get regulators\n");
 
-	ctx->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+	ctx->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW); // was HIGH
 	if (IS_ERR(ctx->reset)) {
 		ret = PTR_ERR(ctx->reset);
-		return dev_err_probe(dev, ret, "no RESET GPIO\n");
+		return dev_err_probe(dev, ret, "failed to claim reset GPIO\n");
 	}
-
-	spi->mode |= SPI_3WIRE;
-
-	ret = spi_setup(spi);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to apply 3-wire SPI configuration\n");
 
 	ret = mipi_dbi_spi_init(spi, &ctx->dbi, NULL);
 	if (ret)
-		return dev_err_probe(dev, ret, "MIPI DBI init failed\n");
-
-	ctx->dbi.read_commands = s6d04d1_dbi_read_commands;
+		return dev_err_probe(dev, ret, "failed to initialise SPI\n");
 
 	drm_panel_init(&ctx->panel, dev, &s6d04d1_drm_funcs,
 		       DRM_MODE_CONNECTOR_DPI);
 
+#if 0
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to add backlight\n");
+#endif
+
+	ctx->bl_dev = devm_backlight_device_register(dev, "s6d04d1-bl", dev,
+			ctx, &s6d04d1_backlight_ops, &backlight_props);
+	if (IS_ERR(ctx->bl_dev))
+		return dev_err_probe(dev, PTR_ERR(ctx->bl_dev),
+					"failed to register backlight\n");
+
+	ctx->panel.backlight = ctx->bl_dev;
 
 	spi_set_drvdata(spi, ctx);
 	drm_panel_add(&ctx->panel);
+
+	debugfs_create_file("trigger_power_on", 0200, NULL, ctx,
+		     &s6d04d1_debug_power_on_fops);
+	debugfs_create_file("trigger_read_mtp", 0200, NULL, ctx,
+		     &s6d04d1_debug_read_mtp_fops);
 
 	return 0;
 }

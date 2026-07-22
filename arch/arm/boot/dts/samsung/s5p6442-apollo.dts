@@ -187,8 +187,8 @@
 
 	i2c_sound: i2c-gpio-0 {
 		compatible = "i2c-gpio";
-		sda-gpios = <&mp05 3 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // ASSUMED
-		scl-gpios = <&mp05 2 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // ASSUMED
+		sda-gpios = <&mp05 3 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // CONFIRMED
+		scl-gpios = <&mp05 2 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>; // CONFIRMED
 		i2c-gpio,delay-us = <2>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -637,23 +637,25 @@
 		#size-cells = <0>;
 
 		sck-gpios = <&mp04 1 GPIO_ACTIVE_HIGH>; // CONFIRMED
+		miso-gpios = <&mp04 2 GPIO_ACTIVE_HIGH>; // CONFIRMED
 		mosi-gpios = <&mp04 3 GPIO_ACTIVE_HIGH>; // CONFIRMED
-		cs-gpios = <&mp01 1 GPIO_ACTIVE_HIGH>; // CONFIRMED
-		spi-3wire;
+		cs-gpios = <&mp01 1 GPIO_ACTIVE_LOW>; // CONFIRMED
+
 		num-chipselects = <1>;
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&lcd_spi_pins>;
+		pinctrl-0 = <&lcd_spi_pins &lcd_spi_miso_pin>;
 
 		panel@0 {
 			compatible = "s6d04d1", "samsung,s6d04d1";
 			reg = <0>;
 
-			spi-3wire;
 			reset-gpios = <&mp05 5 GPIO_ACTIVE_LOW>; // CONFIRMED
 			vdd3-supply = <&ldo11_reg>;
 			vci-supply = <&ldo12_reg>;
 			spi-max-frequency = <1200000>;
+			spi-cpol;
+			spi-cpha;
 
 			pinctrl-names = "default";
 			pinctrl-0 = <&panel_rst>;
@@ -665,6 +667,7 @@
 			};
 		};
 	};
+
 };
 
 &adc {
@@ -682,7 +685,7 @@
 
 &fimd {
 	pinctrl-names = "default";
-	pinctrl-0 = <&lcd_ctrl &lcd_sync &lcd_clk &lcd_data24>;
+	pinctrl-0 = <&lcd_ctrl &lcd_clk &lcd_data24>;
 	status = "okay";
 
 //	samsung,invert-vden = <0>;
@@ -898,6 +901,11 @@
 		samsung,pins = "mp01-1", "mp04-1", "mp04-3"; // CONFIRMED
 		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
+	};
+
+	lcd_spi_miso_pin: spi-lcd-miso-pin {
+		samsung,pins = "mp04-2";
+		samsung,pin-pud = <S5P6442_PIN_PULL_UP>;
 	};
 
 /*	fg_i2c_pins: fg-i2c-pins {

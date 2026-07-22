@@ -714,13 +714,6 @@
 		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
 	};
 
-	lcd_sync: lcd-sync-pins {
-		samsung,pins = "gpf0-0", "gpf0-1";
-		samsung,pin-function = <S5P6442_PIN_FUNC_2>;
-		samsung,pin-pud = <S5P6442_PIN_PULL_NONE>;
-		samsung,pin-drv = <S5P6442_PIN_DRV_LV1>;
-	};
-
 	lcd_clk: lcd-clk-pins {
 		samsung,pins = "gpf0-0", "gpf0-1", "gpf0-2", "gpf0-3";
 		samsung,pin-function = <S5P6442_PIN_FUNC_2>;
