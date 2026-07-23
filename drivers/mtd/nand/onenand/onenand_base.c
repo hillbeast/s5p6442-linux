@@ -564,7 +564,6 @@ static int onenand_wait(struct mtd_info *mtd, int state)
 		interrupt = this->read_word(this->base + ONENAND_REG_INTERRUPT);
 
 		if (interrupt & flags) {
-			pr_info("%s: interrupted (this is good)\n", __func__);
 			break;
 		}
 
@@ -4062,9 +4061,6 @@ int onenand_scan(struct mtd_info *mtd, int maxchips)
 
 	/* Set the bad block marker position */
 	this->badblockpos = ONENAND_BADBLOCK_POS;
-
-	pr_info("%s: badblockpos = %d\n", __func__, this->badblockpos);
-	pr_info("%s: this->chipsize = 0x%08x\n", __func__, (unsigned int)this->chipsize);
 
 	ret = this->scan_bbt(mtd);
 	if ((!FLEXONENAND(this)) || ret)
